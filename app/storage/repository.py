@@ -95,23 +95,53 @@ def get_chunks_for_document(
     return chunks
 
 
+def get_document_processing_counts(
+    db_path: str | Path, document_id: int
+) -> tuple[int, int, int]:
+    """Return section_count, chunk_count, and indexed_term_count for a document."""
+    with connect(db_path) as connection:
+        section_count = connection.execute(
+            "SELECT COUNT(*) FROM sections WHERE document_id = ?",
+            (document_id,),
+        ).fetchone()[0]
+        chunk_count = connection.execute(
+            "SELECT COUNT(*) FROM chunks WHERE document_id = ?",
+            (document_id,),
+        ).fetchone()[0]
+        indexed_term_count = connection.execute(
+            "SELECT COUNT(*) FROM index_terms WHERE document_id = ?",
+            (document_id,),
+        ).fetchone()[0]
+    return int(section_count), int(chunk_count), int(indexed_term_count)
+
+
+def document_has_index(db_path: str | Path, document_id: int) -> bool:
+    """Return True if BM25 statistics exist for the document."""
+    with connect(db_path) as connection:
+        row = connection.execute(
+            "SELECT 1 FROM bm25_statistics WHERE document_id = ?",
+            (document_id,),
+        ).fetchone()
+    return row is not None
+
+
 def save_document_bundle(
     db_path: str | Path,
     extraction: DocumentExtractionResult,
     sections: list[DocumentSection],
     chunks: list[DocumentChunk],
-) -> int:
+) -> tuple[int, bool]:
     """
     Persist extraction output, sections, and chunks.
 
-    If the checksum already exists, returns the existing document id without
-    creating duplicate rows.
+    If the checksum already exists, returns the existing document id and False
+    without creating duplicate rows.
     """
     initialize_database(db_path)
 
     existing = get_document_by_checksum(db_path, extraction.checksum_sha256)
     if existing is not None:
-        return existing.id
+        return existing.id, False
 
     with connect(db_path) as connection:
         cursor = connection.execute(
@@ -198,7 +228,7 @@ def save_document_bundle(
         )
         connection.commit()
 
-    return document_id
+    return document_id, True
 
 
 def save_index_bundle(
@@ -206,9 +236,16 @@ def save_index_bundle(
     document_id: int,
     index: InvertedIndex,
     bm25_stats: dict,
-) -> None:
-    """Persist inverted index postings and BM25 statistics for a document."""
+) -> bool:
+    """
+    Persist inverted index postings and BM25 statistics for a document.
+
+    Returns True when a new index is saved, False if one already exists.
+    """
     initialize_database(db_path)
+
+    if document_has_index(db_path, document_id):
+        return False
 
     with connect(db_path) as connection:
         for term, document_frequency in bm25_stats.get("df", {}).items():
@@ -272,6 +309,8 @@ def save_index_bundle(
             ),
         )
         connection.commit()
+
+    return True
 
 
 def load_bm25_statistics(db_path: str | Path, document_id: int) -> dict:

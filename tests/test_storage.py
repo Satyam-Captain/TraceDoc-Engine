@@ -74,7 +74,7 @@ def test_document_saved(tmp_path: Path) -> None:
     extraction = _sample_extraction()
     sections, chunks = structure_document(extraction.file_name, extraction.text)
 
-    document_id = save_document_bundle(db_path, extraction, sections, chunks)
+    document_id, _ = save_document_bundle(db_path, extraction, sections, chunks)
     saved = get_document_by_checksum(db_path, extraction.checksum_sha256)
 
     assert document_id == saved.id
@@ -87,10 +87,12 @@ def test_duplicate_checksum_not_duplicated(tmp_path: Path) -> None:
     extraction = _sample_extraction()
     sections, chunks = structure_document(extraction.file_name, extraction.text)
 
-    first_id = save_document_bundle(db_path, extraction, sections, chunks)
-    second_id = save_document_bundle(db_path, extraction, sections, chunks)
+    first_id, first_created = save_document_bundle(db_path, extraction, sections, chunks)
+    second_id, second_created = save_document_bundle(db_path, extraction, sections, chunks)
 
     assert first_id == second_id
+    assert first_created is True
+    assert second_created is False
     assert len(list_documents(db_path)) == 1
 
 
@@ -98,7 +100,7 @@ def test_sections_saved(tmp_path: Path) -> None:
     db_path = tmp_path / "tracedoc.db"
     extraction = _sample_extraction()
     sections, chunks = structure_document(extraction.file_name, extraction.text)
-    document_id = save_document_bundle(db_path, extraction, sections, chunks)
+    document_id, _ = save_document_bundle(db_path, extraction, sections, chunks)
 
     with connect(db_path) as connection:
         count = connection.execute(
@@ -114,7 +116,7 @@ def test_chunks_saved(tmp_path: Path) -> None:
     db_path = tmp_path / "tracedoc.db"
     extraction = _sample_extraction()
     sections, chunks = structure_document(extraction.file_name, extraction.text)
-    document_id = save_document_bundle(db_path, extraction, sections, chunks)
+    document_id, _ = save_document_bundle(db_path, extraction, sections, chunks)
 
     loaded_chunks = get_chunks_for_document(db_path, document_id)
 
@@ -126,7 +128,7 @@ def test_index_terms_saved(tmp_path: Path) -> None:
     db_path = tmp_path / "tracedoc.db"
     extraction = _sample_extraction()
     sections, chunks = structure_document(extraction.file_name, extraction.text)
-    document_id = save_document_bundle(db_path, extraction, sections, chunks)
+    document_id, _ = save_document_bundle(db_path, extraction, sections, chunks)
     index, stats = prepare_document_chunks(chunks)
     save_index_bundle(db_path, document_id, index, stats)
 
@@ -144,7 +146,7 @@ def test_bm25_stats_saved_and_loaded(tmp_path: Path) -> None:
     db_path = tmp_path / "tracedoc.db"
     extraction = _sample_extraction()
     sections, chunks = structure_document(extraction.file_name, extraction.text)
-    document_id = save_document_bundle(db_path, extraction, sections, chunks)
+    document_id, _ = save_document_bundle(db_path, extraction, sections, chunks)
     index, stats = prepare_document_chunks(chunks)
     save_index_bundle(db_path, document_id, index, stats)
 
@@ -159,7 +161,7 @@ def test_audit_event_created(tmp_path: Path) -> None:
     db_path = tmp_path / "tracedoc.db"
     extraction = _sample_extraction()
     sections, chunks = structure_document(extraction.file_name, extraction.text)
-    document_id = save_document_bundle(db_path, extraction, sections, chunks)
+    document_id, _ = save_document_bundle(db_path, extraction, sections, chunks)
 
     events = list_audit_events(db_path, document_id=document_id)
 
@@ -172,7 +174,7 @@ def test_loaded_index_can_be_searched(tmp_path: Path) -> None:
     db_path = tmp_path / "tracedoc.db"
     extraction = _sample_extraction()
     sections, chunks = structure_document(extraction.file_name, extraction.text)
-    document_id = save_document_bundle(db_path, extraction, sections, chunks)
+    document_id, _ = save_document_bundle(db_path, extraction, sections, chunks)
     index, stats = prepare_document_chunks(chunks)
     save_index_bundle(db_path, document_id, index, stats)
 

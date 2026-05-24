@@ -135,12 +135,43 @@ db_path = "data/index/tracedoc.db"
 initialize_database(db_path)
 
 sections, chunks = structure_document("policy.txt", text)
-document_id = save_document_bundle(db_path, extraction, sections, chunks)
+document_id, created = save_document_bundle(db_path, extraction, sections, chunks)
 index, bm25_stats = prepare_document_chunks(chunks)
 save_index_bundle(db_path, document_id, index, bm25_stats)
 
 loaded_index = load_index_for_document(db_path, document_id)
 loaded_stats = load_bm25_statistics(db_path, document_id)
+```
+
+**Run tests:**
+
+```bash
+python -m pytest
+```
+
+## Step 7: End-to-end document processing pipeline
+
+`process_document()` orchestrates the full deterministic backend flow in one call:
+
+**ingest → structure → chunk → index → persist**
+
+No AI, LLM, embeddings, or external APIs are used. The SQLite database stores the document bundle and lexical index. Duplicate files (same SHA-256 checksum) return `duplicate=True` and reuse the existing `document_id` without creating duplicate rows.
+
+**Usage (Python):**
+
+```python
+from app.pipeline import process_document
+
+result = process_document("data/uploads/policy.txt", db_path="data/tracedoc.db")
+print(result.document_id, result.chunk_count, result.duplicate, result.warnings)
+```
+
+**Batch processing:**
+
+```python
+from app.pipeline import process_documents
+
+results = process_documents(["doc1.txt", "doc2.pdf"], db_path="data/tracedoc.db")
 ```
 
 **Run tests:**
