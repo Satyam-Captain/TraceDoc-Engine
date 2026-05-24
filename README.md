@@ -1,8 +1,11 @@
 # TraceDoc Engine
 
 [![CI](https://github.com/Satyam-Captain/TraceDoc-Engine/actions/workflows/ci.yml/badge.svg)](https://github.com/Satyam-Captain/TraceDoc-Engine/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Satyam-Captain/TraceDoc-Engine?include_prereleases&label=v0.1.0)](https://github.com/Satyam-Captain/TraceDoc-Engine/releases/tag/v0.1.0)
 
-**Deterministic evidence-based document QA engine** for local laptops.
+**Version 0.1.0** — deterministic evidence-based document QA engine for local laptops.
+
+**Deterministic symbolic document intelligence** — citation-first answers with optional structured lists and graph-based relationship replies. No LLM, no embeddings, local only.
 
 TraceDoc ingests PDF, DOCX, and TXT files, builds a lexical index, and returns **citation-first evidence cards** for each question. For list-like questions it can also show a **structured extractive answer** built only from retrieved snippets—still no LLM or invented content.
 
@@ -407,6 +410,22 @@ tracedoc-engine/
   tests/         Pytest suite
 ```
 
+## Release v0.1.0
+
+Stable **demo release** (May 2026). Full notes: [`CHANGELOG.md`](CHANGELOG.md).
+
+```bash
+git checkout v0.1.0
+pip install -r requirements.txt
+python -m pytest && python scripts/smoke_test.py && python eval/run_eval.py
+streamlit run app/main.py
+```
+
+| | |
+|--|--|
+| **Capabilities** | Ingest PDF/DOCX/TXT, semantic tree, schema + grammar discovery, knowledge graph, BM25 + section retrieval, structured/graph/evidence answers, audit log, eval benchmark, CI |
+| **Limitations** | No generative AI; lexical-only search; heading-dependent sections; single-user local SQLite |
+
 ## License / status
 
-Active development. See git history for incremental step commits (ingestion through query interpreter).
+**v0.1.0** demo release. See [`CHANGELOG.md`](CHANGELOG.md) and git history for incremental step commits.
