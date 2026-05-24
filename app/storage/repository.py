@@ -39,6 +39,18 @@ def _row_to_document(row: Any) -> DocumentRecord:
     )
 
 
+def get_document_by_id(
+    db_path: str | Path, document_id: int
+) -> DocumentRecord | None:
+    """Return a document by internal id, or None if it does not exist."""
+    with connect(db_path) as connection:
+        row = connection.execute(
+            "SELECT * FROM documents WHERE id = ?",
+            (document_id,),
+        ).fetchone()
+    return _row_to_document(row) if row else None
+
+
 def get_document_by_checksum(
     db_path: str | Path, checksum_sha256: str
 ) -> DocumentRecord | None:

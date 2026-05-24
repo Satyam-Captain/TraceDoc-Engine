@@ -212,6 +212,37 @@ for card in package.cards:
 python -m pytest
 ```
 
+## Step 9: Document question-answer orchestration
+
+`ask_document()` connects the **Local Storage Layer**, **Deterministic Retrieval Core**, and **Evidence Engine** into one backend call:
+
+**load document → load index & BM25 → search → compose evidence cards**
+
+Responses are **evidence-only** (`EVIDENCE_ONLY` or `NO_EVIDENCE`). No generative answer text is produced. No AI, LLM, embeddings, or external APIs are used.
+
+**Usage (Python):**
+
+```python
+from app.pipeline import process_document
+from app.qa import ask_document
+
+process_result = process_document("data/uploads/policy.txt", db_path="data/tracedoc.db")
+answer = ask_document(
+    "What are the HPC6 memory requirements?",
+    process_result.document_id,
+    db_path="data/tracedoc.db",
+)
+
+for card in answer.cards:
+    print(card.confidence, card.citation, card.snippet)
+```
+
+**Run tests:**
+
+```bash
+python -m pytest
+```
+
 ## Layout
 
 - `app/` — ingestion, structure, indexing, query, retrieval, evidence, audit, storage
