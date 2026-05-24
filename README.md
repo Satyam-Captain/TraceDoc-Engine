@@ -129,6 +129,17 @@ PDF text extraction often loses markdown-style structure, so headings like *Exis
 
 Sample: `samples/pdf_style_document.txt`
 
+## Step 21.1: Schema normalization hardening
+
+Semantic categories are derived from headings via `app/schema/normalization.py`:
+
+- Strips weak suffix phrases (`for implementation`, `overview`, …)
+- Maps multi-word phrases (`design patterns`, `building blocks`, …) to stable keys (`design_pattern`, `building_block`)
+- Singularizes tokens deterministically without corrupting full headings
+- Applies confidence thresholds so vague headings like *Overview* are not stored
+
+Section retrieval uses the loaded document schema to boost sections whose normalized category matches the question. Debug trace may show `normalized_heading='…' -> '…'`, `schema_category_confidence=…`, and `category_match_reason=semantic_heading_normalization`.
+
 ## Step 21: Deterministic schema discovery
 
 Each uploaded document gets a **discovered schema** at processing time (`app/schema/`):

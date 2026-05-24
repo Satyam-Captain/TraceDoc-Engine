@@ -2,8 +2,14 @@
 
 from app.schema.discovery import (
     discover_document_schema,
+    format_category_normalization_trace,
     match_question_to_schema_category,
+)
+from app.schema.normalization import (
+    extract_candidate_category,
     normalize_category_name,
+    normalize_heading_text,
+    singularize_term,
 )
 from app.schema.graph_candidates import discover_graph_candidates
 from app.schema.models import (
@@ -26,8 +32,12 @@ __all__ = [
     "build_pattern_registry",
     "discover_document_schema",
     "discover_graph_candidates",
+    "extract_candidate_category",
+    "format_category_normalization_trace",
     "match_question_to_schema_category",
     "normalize_category_name",
+    "normalize_heading_text",
+    "singularize_term",
     "regexes_for_discovered_pattern",
     "registry_patterns_for_category",
 ]

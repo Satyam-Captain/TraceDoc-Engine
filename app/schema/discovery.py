@@ -11,28 +11,14 @@ from app.schema.models import (
     DiscoveredPattern,
     DocumentSchema,
 )
-from app.structure.models import DocumentChunk, DocumentSection
-
-_HEADING_CATEGORY_RULES: tuple[tuple[re.Pattern[str], str, float], ...] = (
-    (re.compile(r"\bexisting\s+architectures?\b", re.I), "architecture", 0.95),
-    (re.compile(r"\barchitectures?\b", re.I), "architecture", 0.80),
-    (re.compile(r"\bdesign\s+patterns?\b", re.I), "design_pattern", 0.95),
-    (re.compile(r"\bopen[- ]source\s+building\s+blocks?\b", re.I), "building_block", 0.92),
-    (re.compile(r"\bbuilding\s+blocks?\b", re.I), "building_block", 0.75),
-    (re.compile(r"\bcommon\s+capabilities?\b", re.I), "capability", 0.92),
-    (re.compile(r"\bcapabilities?\b", re.I), "capability", 0.70),
-    (re.compile(r"\bfuture\s+improvements?\b", re.I), "improvement", 0.92),
-    (re.compile(r"\bimprovements?\b", re.I), "improvement", 0.65),
-    (re.compile(r"\brequirements?\b", re.I), "requirement", 0.80),
-    (re.compile(r"\blimitations?\b", re.I), "limitation", 0.80),
-    (re.compile(r"\bevaluation\b", re.I), "evaluation", 0.75),
-    (re.compile(r"\bconclusion\b", re.I), "conclusion", 0.75),
-    (re.compile(r"\btechnologies?\b", re.I), "technology", 0.70),
-    (re.compile(r"\bworkflows?\b", re.I), "workflow", 0.70),
-    (re.compile(r"\bprinciples?\b", re.I), "principle", 0.70),
-    (re.compile(r"\bcomponents?\b", re.I), "component", 0.70),
-    (re.compile(r"\bphases?\b", re.I), "phase", 0.70),
+from app.schema.normalization import (
+    category_confidence_from_heading,
+    extract_candidate_category,
+    meets_category_confidence_threshold,
+    normalize_category_name,
+    normalize_heading_text,
 )
+from app.structure.models import DocumentChunk, DocumentSection
 
 _ORDINAL_FIRST = re.compile(
     r"(?i)the\s+first\s+(.+?)\s+is\s+(?:the\s+)?(.+?)"
@@ -54,58 +40,21 @@ _MOST_COMMON_IS = re.compile(
     r"(?i)the\s+most\s+common\b.+?\bis\s+(?:the\s+)?(.+?)"
     r"(?=\s*[:;.!?]|(?:\s+)(?:which|that|where|with)\b|$)"
 )
-_MEANS = re.compile(
-    r"(?i)^(.{3,80}?)\s+means\s+(.{3,80}?)(?:[.!?]|$)"
-)
-_REFERS_TO = re.compile(
-    r"(?i)^(.{3,80}?)\s+refers\s+to\s+(.{3,80}?)(?:[.!?]|$)"
-)
-_CONTAINS = re.compile(
-    r"(?i)^(.{3,80}?)\s+contains\s+(.{3,80}?)(?:[.!?]|$)"
-)
-_DEPENDS_ON = re.compile(
-    r"(?i)^(.{3,80}?)\s+depends\s+on\s+(.{3,80}?)(?:[.!?]|$)"
-)
-
-
-def normalize_category_name(title: str) -> str:
-    """Normalize a heading into a stable category key."""
-    cleaned = title.strip().lower()
-    cleaned = cleaned.replace("-", " ")
-    cleaned = re.sub(r"[^a-z0-9\s]", "", cleaned)
-    cleaned = re.sub(r"\s+", " ", cleaned).strip()
-    for suffix, replacement in (
-        ("ies", "y"),
-        ("ches", "ch"),
-        ("shes", "sh"),
-        ("xes", "x"),
-        ("ses", "s"),
-        ("s", ""),
-    ):
-        if cleaned.endswith(suffix) and len(cleaned) > len(suffix) + 2:
-            cleaned = cleaned[: -len(suffix)] + replacement
-            break
-    cleaned = cleaned.replace(" ", "_")
-    return cleaned or "general"
 
 
 def category_from_heading(title: str) -> tuple[str, float] | None:
-    """Map a section heading to a semantic category when rules match."""
-    for pattern, category, score in _HEADING_CATEGORY_RULES:
-        if pattern.search(title):
-            return category, score
-    return None
+    """Map a section heading to a semantic category using normalization rules."""
+    category = extract_candidate_category(title)
+    if category is None:
+        return None
+    score = category_confidence_from_heading(title, category)
+    if not meets_category_confidence_threshold(score):
+        return None
+    return category, score
 
 
 def _canonical_type_phrase(type_phrase: str) -> str:
     return re.sub(r"\s+", " ", type_phrase.strip().lower())
-
-
-def _pattern_name_for_ordinal(category: str, type_phrase: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "_", type_phrase.lower()).strip("_")
-    if not slug:
-        return f"ordinal_{category}"
-    return f"ordinal_{slug}"
 
 
 def _discover_categories_from_chunk_headings(
@@ -115,7 +64,7 @@ def _discover_categories_from_chunk_headings(
     discovered: dict[str, DiscoveredCategory] = {}
     for chunk in chunks:
         first_line = chunk.text.split("\n", maxsplit=1)[0].strip()
-        if not first_line or len(first_line) > 100:
+        if not first_line or len(first_line) > 120:
             continue
         if first_line.endswith((".", "?", "!")) and " is " in first_line.lower():
             continue
@@ -123,7 +72,8 @@ def _discover_categories_from_chunk_headings(
         if mapping is None:
             continue
         category_key, score = mapping
-        if category_key in discovered and discovered[category_key].confidence_score >= score:
+        existing = discovered.get(category_key)
+        if existing is not None and existing.confidence_score >= score:
             continue
         discovered[category_key] = DiscoveredCategory(
             name=category_key.replace("_", " "),
@@ -143,22 +93,15 @@ def _discover_categories_from_sections(
         if mapping is None:
             continue
         category_key, score = mapping
-        if category_key in discovered:
-            existing = discovered[category_key]
-            if score > existing.confidence_score:
-                discovered[category_key] = DiscoveredCategory(
-                    name=category_key.replace("_", " "),
-                    normalized_name=category_key,
-                    source_section=section.title,
-                    confidence_score=score,
-                    discovered_patterns=list(existing.discovered_patterns),
-                )
+        existing = discovered.get(category_key)
+        if existing is not None and existing.confidence_score >= score:
             continue
         discovered[category_key] = DiscoveredCategory(
             name=category_key.replace("_", " "),
             normalized_name=category_key,
             source_section=section.title,
             confidence_score=score,
+            discovered_patterns=list(existing.discovered_patterns) if existing else [],
         )
     return list(discovered.values())
 
@@ -173,6 +116,8 @@ def _section_category_map(
             continue
         mapping[section.section_id] = result[0]
         mapping[section.title.lower()] = result[0]
+        normalized = normalize_heading_text(section.title)
+        mapping[normalized] = result[0]
     return mapping
 
 
@@ -188,11 +133,14 @@ def _category_for_chunk(
     if section_key in category_by_section_title:
         return category_by_section_title[section_key]
 
+    first_line = chunk.text.split("\n", maxsplit=1)[0].strip()
+    line_category = extract_candidate_category(first_line)
+    if line_category:
+        return line_category
+
     for section in sections:
         result = category_from_heading(section.title)
         if result is None:
-            continue
-        if chunk.start_line < section.start_line or chunk.end_line > section.end_line:
             continue
         if chunk.start_line >= section.start_line and chunk.end_line <= section.end_line:
             return result[0]
@@ -209,6 +157,12 @@ def _discover_patterns_from_chunks(
         category.source_section.lower(): category.normalized_name
         for category in categories
     }
+    category_by_normalized = {
+        normalize_heading_text(category.source_section): category.normalized_name
+        for category in categories
+    }
+    category_by_section_title.update(category_by_normalized)
+
     if categories and not sections:
         default_category = max(categories, key=lambda item: item.confidence_score)
         section_categories.setdefault("__default__", default_category.normalized_name)
@@ -345,6 +299,12 @@ def match_question_to_schema_category(
     schema: DocumentSchema,
 ) -> DiscoveredCategory | None:
     """Route a question to a discovered category when phrasing matches."""
+    question_category = extract_candidate_category(question)
+    if question_category is not None:
+        for category in schema.categories:
+            if category.normalized_name == question_category:
+                return category
+
     lower = question.lower()
     best: DiscoveredCategory | None = None
     best_score = 0.0
@@ -354,6 +314,8 @@ def match_question_to_schema_category(
         plural = label + "s" if not label.endswith("s") else label
         matched = False
         if label in lower or plural in lower:
+            matched = True
+        if "design" in lower and "pattern" in lower and category.normalized_name == "design_pattern":
             matched = True
         if category.source_section.lower() in lower:
             matched = True
@@ -365,3 +327,15 @@ def match_question_to_schema_category(
             best_score = score
 
     return best
+
+
+def format_category_normalization_trace(categories: list[DiscoveredCategory]) -> list[str]:
+    """Debug lines for heading → category normalization."""
+    lines: list[str] = []
+    for category in categories:
+        lines.append(
+            f"normalized_heading={category.source_section!r} -> "
+            f"{category.normalized_name!r}"
+        )
+        lines.append(f"schema_category_confidence={category.confidence_score:.2f}")
+    return lines

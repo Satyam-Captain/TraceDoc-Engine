@@ -35,7 +35,10 @@ from app.structure.hierarchy import infer_section_ranges
 from app.structure.models import DocumentSection
 from app.retrieval.models import SearchResult
 from app.structure.models import DocumentChunk
-from app.schema.discovery import match_question_to_schema_category
+from app.schema.discovery import (
+    format_category_normalization_trace,
+    match_question_to_schema_category,
+)
 from app.schema.registry import build_pattern_registry
 from app.schema.models import DocumentSchema
 from app.storage import (
@@ -218,14 +221,26 @@ def _sections_with_inferred_ranges(
     debug_trace: list[str] | None = None,
 ) -> list[StoredSection]:
     stored_sections = get_sections_for_document(db_path, document_id)
+    derived_sections = derive_sections_from_chunks(chunks)
     if debug_trace is not None:
         debug_trace.append(f"stored_section_count={len(stored_sections)}")
-    if not stored_sections:
+
+    merged_by_title: dict[str, StoredSection] = {
+        section.title.lower(): section for section in stored_sections
+    }
+    for section in derived_sections:
+        merged_by_title.setdefault(section.title.lower(), section)
+
+    if not merged_by_title:
         if debug_trace is not None:
             debug_trace.append("sections_source=derived_from_chunks")
-        return derive_sections_from_chunks(chunks)
+        return derived_sections
+
     if debug_trace is not None:
-        debug_trace.append("sections_source=stored_with_inferred_ranges")
+        if stored_sections:
+            debug_trace.append("sections_source=stored_with_semantic_merge")
+        else:
+            debug_trace.append("sections_source=derived_from_chunks")
 
     document_sections = [
         DocumentSection(
@@ -236,7 +251,10 @@ def _sections_with_inferred_ranges(
             end_line=section.end_line,
             parent_section_id=section.parent_section_id,
         )
-        for section in stored_sections
+        for section in sorted(
+            merged_by_title.values(),
+            key=lambda item: (item.start_line, item.section_id),
+        )
     ]
     total_lines = max((chunk.end_line for chunk in chunks), default=1)
     if document_sections:
@@ -352,6 +370,9 @@ def ask_document(
                 category.normalized_name for category in document_schema.categories
             )
             debug_trace.append(f"discovered_categories=[{','.join(category_names)}]")
+            debug_trace.extend(
+                format_category_normalization_trace(document_schema.categories)
+            )
             debug_trace.append(
                 f"graph_candidates_count={len(document_schema.graph_candidates)}"
             )
@@ -361,6 +382,12 @@ def ask_document(
             if matched_schema_category is not None:
                 debug_trace.append(
                     f"schema_category_match={matched_schema_category.normalized_name}"
+                )
+                debug_trace.append(
+                    f"schema_category_confidence={matched_schema_category.confidence_score:.2f}"
+                )
+                debug_trace.append(
+                    "category_match_reason=semantic_heading_normalization"
                 )
                 registry = build_pattern_registry(document_schema)
                 pattern_names = registry.get(
@@ -393,7 +420,12 @@ def ask_document(
                     "candidate_sections="
                     + _format_candidate_sections(question, sections)
                 )
-                ranked_sections = find_relevant_sections(question, sections, top_k=3)
+                ranked_sections = find_relevant_sections(
+                    question,
+                    sections,
+                    top_k=3,
+                    document_schema=document_schema,
+                )
                 if not ranked_sections:
                     debug_trace.append("fallback_reason=no_relevant_section")
                 else:
@@ -403,7 +435,11 @@ def ask_document(
                         "selected_section_range="
                         f"{best_section.start_line}-{best_section.end_line}"
                     )
-                    section_score = score_section_relevance(question, best_section)
+                    section_score = score_section_relevance(
+                        question,
+                        best_section,
+                        document_schema=document_schema,
+                    )
                     debug_trace.append(f"selected_section_score={section_score:.2f}")
                     section_chunks = collect_section_chunks(
                         best_section, chunks, max_chunks=20
