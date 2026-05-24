@@ -55,6 +55,35 @@ print(len(sections), len(chunks), chunks[0].chunk_id)
 python -m pytest
 ```
 
+## Step 4: Knowledge preparation and lexical indexing
+
+The Knowledge Preparation Layer turns structured chunks into **classical IR artifacts**: tokenized terms, an inverted index, and BM25 statistics. This is deterministic lexical search—not semantic search. No embeddings, vector databases, AI models, or external APIs are used.
+
+**Techniques:**
+- **Tokenization & normalization** — explainable splitting; preserves identifiers like `REQ-001`, `HPC6`, `ISO27001`
+- **Stopwords** — configurable filtering (off by default during indexing)
+- **Inverted index** — `term → chunk` postings with frequencies and positions
+- **BM25 preparation** — document frequency (df), inverse document frequency (idf), and average chunk length (avgdl) for a later retrieval step
+
+Every indexed term maps to explicit chunk evidence, making ranking auditable and reproducible on a laptop.
+
+**Usage (Python):**
+
+```python
+from app.indexing import prepare_document_chunks
+from app.structure import structure_document
+
+_, chunks = structure_document("policy.txt", extracted_text)
+index, bm25_stats = prepare_document_chunks(chunks)
+print(index.vocabulary_size, bm25_stats["avgdl"])
+```
+
+**Run tests:**
+
+```bash
+python -m pytest
+```
+
 ## Layout
 
 - `app/` — ingestion, structure, indexing, query, retrieval, evidence, audit, storage
