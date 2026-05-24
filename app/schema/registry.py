@@ -15,7 +15,9 @@ _ORDINAL_PREFIXES: tuple[tuple[str, str], ...] = (
     ("ordinal_first", r"(?i)the\s+first\s+{modifier}{type}\s+is\s+(?:the\s+)?"),
     ("ordinal_second", r"(?i)(?:a|the)\s+second\s+{modifier}{type}\s+is\s+(?:the\s+)?"),
     ("ordinal_third", r"(?i)(?:a|the)\s+third\s+{modifier}{type}\s+is\s+(?:the\s+)?"),
-    ("ordinal_fourth", r"(?i)(?:a|the)\s+(?:fourth|fifth)\s+{modifier}{type}\s+is\s+(?:the\s+)?"),
+    ("ordinal_fourth", r"(?i)(?:a|the)\s+fourth\s+{modifier}{type}\s+is\s+(?:the\s+)?"),
+    ("ordinal_fifth", r"(?i)(?:a|the)\s+fifth\s+{modifier}{type}\s+is\s+(?:the\s+)?"),
+    ("ordinal_sixth", r"(?i)(?:a|the)\s+sixth\s+{modifier}{type}\s+is\s+(?:the\s+)?"),
 )
 
 _STOP_LOOKAHEAD = (

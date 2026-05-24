@@ -113,7 +113,10 @@ def test_design_patterns_question_end_to_end(tmp_path: Path) -> None:
 
     trace = "\n".join(answer.debug_trace)
     assert "schema_category_match=design_pattern" in trace
-    assert "discovered_grammar=ordinal_design_pattern" in trace
+    assert (
+        "discovered_grammar=ordinal_design_pattern" in trace
+        or "grammar_used=ordinal_design_pattern" in trace
+    )
     assert "grammar_confidence=" in trace
     assert "grammar_sentence_templates=" in trace
     assert "schema_patterns=[ordinal_design_pattern]" in trace

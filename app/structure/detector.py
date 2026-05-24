@@ -91,7 +91,49 @@ def _match_heading(
     if is_probable_heading(line, previous_line, next_line):
         return stripped, 1
 
+    semantic = _match_semantic_category_heading(
+        stripped, previous_line=previous_line, next_line=next_line
+    )
+    if semantic is not None:
+        return semantic
+
     return None
+
+
+def _match_semantic_category_heading(
+    stripped: str,
+    *,
+    previous_line: str | None,
+    next_line: str | None,
+) -> tuple[str, int] | None:
+    """Promote high-confidence semantic category lines to section headings."""
+    from app.schema.normalization import (
+        category_confidence_from_heading,
+        extract_candidate_category,
+        meets_category_confidence_threshold,
+    )
+
+    if len(stripped) > 120 or stripped.endswith((".", "!", "?")):
+        return None
+    if " is " in stripped.lower():
+        return None
+
+    category = extract_candidate_category(stripped)
+    if category is None:
+        return None
+    confidence = category_confidence_from_heading(stripped, category)
+    if not meets_category_confidence_threshold(confidence):
+        return None
+    if confidence < 0.85:
+        return None
+
+    previous_blank = previous_line is None or not previous_line.strip()
+    if not previous_blank:
+        return None
+    if not next_line or not next_line.strip():
+        return None
+
+    return stripped, 1
 
 
 def detect_sections(text: str) -> list[DocumentSection]:

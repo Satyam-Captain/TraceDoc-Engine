@@ -15,7 +15,7 @@ _STOP_LOOKAHEAD = (
 
 _ORDINAL_SENTENCE = re.compile(
     r"(?i)(?P<ordinal>the\s+first|(?:a|the)\s+second|(?:a|the)\s+third|"
-    r"(?:a|the)\s+(?:fourth|fifth))\s+(?P<type>.+?)\s+is\s+(?:the\s+)?"
+    r"(?:a|the)\s+(?:fourth|fifth|sixth))\s+(?P<type>.+?)\s+is\s+(?:the\s+)?"
     r"(?P<entity>.+?)"
     + _STOP_LOOKAHEAD
 )
@@ -31,6 +31,7 @@ _ORDINAL_TEMPLATE_LABELS: tuple[tuple[str, str], ...] = (
     ("third", "The third <CATEGORY> is <ENTITY>"),
     ("fourth", "The fourth <CATEGORY> is <ENTITY>"),
     ("fifth", "The fifth <CATEGORY> is <ENTITY>"),
+    ("sixth", "The sixth <CATEGORY> is <ENTITY>"),
 )
 
 _MIN_GRAMMAR_HITS = 2

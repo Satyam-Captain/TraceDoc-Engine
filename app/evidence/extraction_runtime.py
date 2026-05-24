@@ -26,7 +26,9 @@ _TEMPLATE_ORDINAL_PREFIX: tuple[tuple[str, int, str], ...] = (
     ("the first", 1, r"(?i)the\s+first\s+"),
     ("second", 2, r"(?i)(?:a|the)\s+second\s+"),
     ("third", 3, r"(?i)(?:a|the)\s+third\s+"),
-    ("fourth", 4, r"(?i)(?:a|the)\s+(?:fourth|fifth)\s+"),
+    ("fourth", 4, r"(?i)(?:a|the)\s+fourth\s+"),
+    ("fifth", 5, r"(?i)(?:a|the)\s+fifth\s+"),
+    ("sixth", 6, r"(?i)(?:a|the)\s+sixth\s+"),
 )
 
 _CLAUSE_BOUNDARY = re.compile(
@@ -167,7 +169,7 @@ def _is_ordinal_grammar_sentence(sentence: str) -> bool:
     if not stripped:
         return False
     if not re.search(
-        r"(?i)(?:the\s+first|(?:a|the)\s+(?:second|third|fourth|fifth))\s+.+?\s+is\s+",
+        r"(?i)(?:the\s+first|(?:a|the)\s+(?:second|third|fourth|fifth|sixth))\s+.+?\s+is\s+",
         stripped,
     ):
         return False

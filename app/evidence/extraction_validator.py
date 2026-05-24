@@ -37,7 +37,7 @@ _CROSS_CATEGORY_SOURCE_MARKERS: dict[str, tuple[str, ...]] = {
 }
 
 _ORDINAL_GRAMMAR_LINE = re.compile(
-    r"(?i)(?:the\s+first|(?:a|the)\s+(?:second|third|fourth|fifth))\s+.+?\s+is\s+",
+    r"(?i)(?:the\s+first|(?:a|the)\s+(?:second|third|fourth|fifth|sixth))\s+.+?\s+is\s+",
 )
 
 

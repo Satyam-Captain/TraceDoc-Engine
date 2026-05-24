@@ -341,50 +341,16 @@ def collect_section_chunks(
     in_bounds = [
         chunk
         for chunk in ordered
-        if chunk.start_line >= section.start_line and chunk.end_line <= section.end_line
+        if section.start_line <= chunk.start_line <= section.end_line
+        and chunk.end_line <= section.end_line
     ]
     if in_bounds:
         return in_bounds[:max_chunks]
 
-    selected: list[ChunkLike] = []
-    started = False
-    for chunk in ordered:
-        if not started and chunk.start_line >= section.start_line:
-            started = True
-        if not started:
-            continue
-
-        same_section_id = bool(section.section_id) and chunk.section_id == section.section_id
-        same_section_title = (
-            bool(section.title)
-            and bool(chunk.section_title)
-            and chunk.section_title.strip().lower() == section.title.strip().lower()
-        )
-        title_in_first_line = section.title.strip().lower() in chunk.text.split("\n")[0].lower()
-
-        if same_section_id or same_section_title or title_in_first_line:
-            selected.append(chunk)
-            if len(selected) >= max_chunks:
-                break
-            continue
-
-        if selected:
-            break
-
-    if selected:
-        return selected[:max_chunks]
-
-    # Last resort: include chunks starting at section line through next heading-like line.
-    for chunk in ordered:
-        if chunk.start_line < section.start_line:
-            continue
-        if chunk.start_line == section.start_line:
-            selected.append(chunk)
-            continue
-        if selected and _looks_like_inline_heading(chunk.text.split("\n")[0]):
-            break
-        selected.append(chunk)
-        if len(selected) >= max_chunks:
-            break
-
-    return selected[:max_chunks]
+    # Allow a single chunk that starts in-section even if end_line spills by overlap.
+    started_in_section = [
+        chunk
+        for chunk in ordered
+        if section.start_line <= chunk.start_line <= section.end_line
+    ]
+    return started_in_section[:max_chunks]

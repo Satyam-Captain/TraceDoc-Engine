@@ -34,9 +34,9 @@ from app.retrieval import (
     should_use_section_retrieval,
 )
 from app.structure.hierarchy import infer_section_ranges
-from app.structure.models import DocumentSection
+from app.structure.models import DocumentChunk, DocumentSection
+from app.structure.section_assignment import reassign_chunk_sections
 from app.retrieval.models import SearchResult
-from app.structure.models import DocumentChunk
 from app.schema.discovery import (
     format_category_normalization_trace,
     match_question_to_schema_category,
@@ -107,6 +107,8 @@ def _apply_structured_answer(
     package: AnswerPackage,
     question: str,
     document_schema: DocumentSchema | None = None,
+    *,
+    target_category: str | None = None,
 ) -> AnswerPackage:
     """Upgrade answer package to STRUCTURED_EXTRACTIVE when rules match evidence."""
     if package.answer_mode == "NO_EVIDENCE" or not package.cards:
@@ -116,6 +118,7 @@ def _apply_structured_answer(
         question,
         package.cards,
         document_schema=document_schema,
+        target_category=target_category,
     )
     if not structured:
         return package
@@ -219,22 +222,52 @@ def _format_candidate_sections(
     return "[" + ", ".join(labels) + "]"
 
 
+def _normalize_section_title_key(title: str) -> str:
+    import re
+
+    cleaned = re.sub(r"^\s*#+\s*", "", title.strip())
+    return cleaned.lower()
+
+
 def _sections_with_inferred_ranges(
     db_path: str,
     document_id: int,
     chunks: list[DocumentChunk],
     debug_trace: list[str] | None = None,
 ) -> list[StoredSection]:
+    import re
+
     stored_sections = get_sections_for_document(db_path, document_id)
     derived_sections = derive_sections_from_chunks(chunks)
     if debug_trace is not None:
         debug_trace.append(f"stored_section_count={len(stored_sections)}")
 
-    merged_by_title: dict[str, StoredSection] = {
-        section.title.lower(): section for section in stored_sections
-    }
+    merged_by_title: dict[str, StoredSection] = {}
+    for section in stored_sections:
+        key = _normalize_section_title_key(section.title)
+        cleaned_title = re.sub(r"^\s*#+\s*", "", section.title.strip())
+        merged_by_title[key] = StoredSection(
+            section_id=section.section_id,
+            title=cleaned_title,
+            level=section.level,
+            start_line=section.start_line,
+            end_line=section.end_line,
+            parent_section_id=section.parent_section_id,
+        )
     for section in derived_sections:
-        merged_by_title.setdefault(section.title.lower(), section)
+        key = _normalize_section_title_key(section.title)
+        cleaned_title = re.sub(r"^\s*#+\s*", "", section.title.strip())
+        candidate = StoredSection(
+            section_id=section.section_id,
+            title=cleaned_title,
+            level=section.level,
+            start_line=section.start_line,
+            end_line=section.end_line,
+            parent_section_id=section.parent_section_id,
+        )
+        existing = merged_by_title.get(key)
+        if existing is None or candidate.end_line > existing.end_line:
+            merged_by_title[key] = candidate
 
     if not merged_by_title:
         if debug_trace is not None:
@@ -297,6 +330,15 @@ def _section_results_from_chunks(
     for rank, chunk in enumerate(section_chunks):
         matched_terms = _matched_terms_for_chunk(chunk, query_terms)
         score = section_score + max(0.05, 0.5 - (rank * 0.02))
+        in_range = (
+            section.start_line <= chunk.start_line <= section.end_line
+            and chunk.end_line <= section.end_line
+        )
+        why = (
+            f"Matched by section-level retrieval from section '{section.title}'."
+        )
+        if not in_range:
+            why += " context_expanded=True"
         results.append(
             SearchResult(
                 chunk_id=chunk.chunk_id,
@@ -307,15 +349,38 @@ def _section_results_from_chunks(
                 term_scores={term: 1.0 for term in matched_terms},
                 start_line=chunk.start_line,
                 end_line=chunk.end_line,
-                section_title=chunk.section_title or section.title,
+                section_title=section.title,
                 chunk_type=chunk.chunk_type,
-                why_matched=(
-                    f"Matched by section-level retrieval from section '{section.title}'."
-                ),
-                section_id=chunk.section_id or section.section_id,
+                why_matched=why,
+                section_id=section.section_id,
             )
         )
     return results
+
+
+def _align_chunks_to_inferred_sections(
+    chunks: list[DocumentChunk],
+    sections: list[StoredSection],
+    *,
+    total_lines: int,
+) -> list[DocumentChunk]:
+    """Reassign chunk section metadata using inferred section line ranges."""
+    document_sections = [
+        DocumentSection(
+            section_id=section.section_id,
+            title=section.title,
+            level=section.level,
+            start_line=section.start_line,
+            end_line=section.end_line,
+            parent_section_id=section.parent_section_id,
+        )
+        for section in sections
+    ]
+    return reassign_chunk_sections(
+        chunks,
+        document_sections,
+        total_lines=total_lines,
+    )
 
 
 def ask_document(
@@ -366,11 +431,19 @@ def ask_document(
         chunks = get_chunks_for_document(db_path, document_id)
         document_schema = load_document_schema(db_path, document_id)
         matched_schema_category = None
+        target_category: str | None = None
         debug_trace: list[str] = [
             f"intent_type={query_intent.intent_type}",
             f"retrieval_query={retrieval_query!r}",
             f"chunk_count={len(chunks)}",
         ]
+        total_lines = max((chunk.end_line for chunk in chunks), default=1)
+        inferred_sections = _sections_with_inferred_ranges(
+            db_path, document_id, chunks, debug_trace=debug_trace
+        )
+        chunks = _align_chunks_to_inferred_sections(
+            chunks, inferred_sections, total_lines=total_lines
+        )
         if document_schema is not None:
             category_names = sorted(
                 category.normalized_name for category in document_schema.categories
@@ -386,6 +459,8 @@ def ask_document(
                 question, document_schema
             )
             if matched_schema_category is not None:
+                target_category = matched_schema_category.normalized_name
+                debug_trace.append(f"target_category={target_category}")
                 debug_trace.append(
                     f"schema_category_match={matched_schema_category.normalized_name}"
                 )
@@ -400,46 +475,6 @@ def ask_document(
                     matched_schema_category.normalized_name, []
                 )
                 debug_trace.append(f"schema_patterns=[{','.join(pattern_names)}]")
-                grammar = primary_grammar_for_category(
-                    document_schema, matched_schema_category.normalized_name
-                )
-                if grammar is not None:
-                    debug_trace.append(f"discovered_grammar={grammar.pattern_name}")
-                    debug_trace.append(
-                        f"grammar_confidence={grammar.confidence_score:.2f}"
-                    )
-                    template_preview = ";".join(grammar.sentence_templates[:4])
-                    debug_trace.append(
-                        f"grammar_sentence_templates=[{template_preview}]"
-                    )
-                    section_chunks = [
-                        chunk
-                        for chunk in chunks
-                        if chunk.section_title
-                        and matched_schema_category.source_section.lower()
-                        in chunk.section_title.lower()
-                    ]
-                    grammar_text = "\n".join(
-                        chunk.text for chunk in (section_chunks or chunks)
-                    )
-                    from app.evidence.extraction_validator import (
-                        build_extraction_validation_registry,
-                    )
-
-                    validation_registry = build_extraction_validation_registry(
-                        document_schema,
-                        full_text_by_category={
-                            matched_schema_category.normalized_name: grammar_text
-                        },
-                    )
-                    grammar_result = execute_discovered_grammar_with_result(
-                        grammar_text,
-                        grammar,
-                        category=matched_schema_category.normalized_name,
-                        validation_registry=validation_registry,
-                        section_title=matched_schema_category.source_section,
-                    )
-                    debug_trace.extend(grammar_execution_debug_lines(grammar_result))
         search_results: list[SearchResult] = []
         section_retrieval_used = False
         retrieved_section_title: str | None = None
@@ -454,9 +489,7 @@ def ask_document(
         if use_section_retrieval:
             topic_terms = sorted(extract_topic_terms(question))
             debug_trace.append(f"topic_terms={topic_terms}")
-            sections = _sections_with_inferred_ranges(
-                db_path, document_id, chunks, debug_trace=debug_trace
-            )
+            sections = inferred_sections
             debug_trace.append(f"section_count={len(sections)}")
 
             if not sections:
@@ -493,9 +526,78 @@ def ask_document(
                     debug_trace.append(
                         f"collected_section_chunks={len(section_chunks)}"
                     )
+                    chunk_ranges = [
+                        f"{chunk.start_line}-{chunk.end_line}"
+                        for chunk in section_chunks
+                    ]
+                    debug_trace.append(
+                        f"collected_chunk_ranges=[{','.join(chunk_ranges)}]"
+                    )
                     if not section_chunks:
                         debug_trace.append("fallback_reason=no_chunks_in_section")
                     else:
+                        if document_schema is not None and target_category:
+                            grammar = primary_grammar_for_category(
+                                document_schema, target_category
+                            )
+                            if grammar is not None:
+                                debug_trace.append(f"grammar_used={grammar.pattern_name}")
+                                debug_trace.append(
+                                    f"grammar_confidence={grammar.confidence_score:.2f}"
+                                )
+                                template_preview = ";".join(
+                                    grammar.sentence_templates[:4]
+                                )
+                                debug_trace.append(
+                                    f"grammar_sentence_templates=[{template_preview}]"
+                                )
+                                from app.evidence.extraction_validator import (
+                                    build_extraction_validation_registry,
+                                    filter_text_to_category_sentences,
+                                )
+
+                                grammar_text = "\n".join(
+                                    chunk.text for chunk in section_chunks
+                                )
+                                scoped_by_category = {
+                                    target_category: filter_text_to_category_sentences(
+                                        grammar_text,
+                                        target_category,
+                                        document_schema,
+                                    )
+                                }
+                                validation_registry = (
+                                    build_extraction_validation_registry(
+                                        document_schema,
+                                        full_text_by_category=scoped_by_category,
+                                    )
+                                )
+                                grammar_result = execute_discovered_grammar_with_result(
+                                    scoped_by_category[target_category]
+                                    or grammar_text,
+                                    grammar,
+                                    category=target_category,
+                                    validation_registry=validation_registry,
+                                    section_title=best_section.title,
+                                )
+                                debug_trace.extend(
+                                    grammar_execution_debug_lines(grammar_result)
+                                )
+                                if grammar_result.validated_entities:
+                                    preview = ", ".join(
+                                        grammar_result.validated_entities[:8]
+                                    )
+                                    debug_trace.append(
+                                        f"validated_entities=[{preview}]"
+                                    )
+                                if grammar_result.rejected_entities:
+                                    preview = ", ".join(
+                                        grammar_result.rejected_entities[:8]
+                                    )
+                                    debug_trace.append(
+                                        f"rejected_entities=[{preview}]"
+                                    )
+
                         section_results = _section_results_from_chunks(
                             best_section,
                             chunks,
@@ -535,6 +637,14 @@ def ask_document(
             debug_trace.append("using_bm25_fallback=False")
 
         debug_trace.append(f"retrieval_strategy={retrieval_strategy}")
+        if target_category is None:
+            from app.schema.normalization import extract_candidate_category
+
+            inferred = extract_candidate_category(question)
+            if inferred:
+                target_category = inferred
+                debug_trace.append(f"target_category={target_category}")
+
         package = _apply_structured_answer(
             compose_answer_package(
                 question,
@@ -544,6 +654,7 @@ def ask_document(
             ),
             question,
             document_schema=document_schema,
+            target_category=target_category,
         )
         if package.structured_answer and "architect" in question.lower():
             debug_trace.extend(

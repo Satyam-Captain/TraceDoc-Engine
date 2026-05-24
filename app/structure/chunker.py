@@ -202,5 +202,9 @@ def structure_document(
 ) -> tuple[list[DocumentSection], list[DocumentChunk]]:
     """Detect sections and build chunks for a document."""
     sections = detect_sections(text)
+    line_count = len(text.split("\n")) if text else 0
     chunks = chunk_document(document_name, text, sections=sections)
+    from app.structure.section_assignment import reassign_chunk_sections
+
+    chunks = reassign_chunk_sections(chunks, sections, total_lines=line_count)
     return sections, chunks

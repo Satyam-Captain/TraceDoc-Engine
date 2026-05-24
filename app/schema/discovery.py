@@ -207,13 +207,22 @@ def match_question_to_schema_category(
     schema: DocumentSchema,
 ) -> DiscoveredCategory | None:
     """Route a question to a discovered category when phrasing matches."""
+    lower = question.lower()
     question_category = extract_candidate_category(question)
+    if question_category == "pattern" and (
+        "design pattern" in lower or "design patterns" in lower
+    ):
+        question_category = "design_pattern"
+
     if question_category is not None:
         for category in schema.categories:
             if category.normalized_name == question_category:
                 return category
+        if question_category == "design_pattern":
+            for category in schema.categories:
+                if category.normalized_name == "design_pattern":
+                    return category
 
-    lower = question.lower()
     best: DiscoveredCategory | None = None
     best_score = 0.0
 

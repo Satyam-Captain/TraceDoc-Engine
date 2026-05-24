@@ -129,6 +129,10 @@ PDF text extraction often loses markdown-style structure, so headings like *Exis
 
 Sample: `samples/pdf_style_document.txt`
 
+## Stabilization: Symbolic QA pipeline
+
+Section headings such as *Design patterns for implementation* are detected via semantic category heuristics; chunk `section_title` values are reassigned from inferred line ranges before retrieval. Section-level evidence cards always use the retrieved section title, and grammar execution runs only on chunks inside the selected section range for the matched `target_category`.
+
 ## Step 21.4: Semantic boundary enforcement
 
 Extraction is validated against discovered **category boundaries** so grammars do not leak entities from other sections (for example architecture families into a design-pattern answer). `app/evidence/extraction_validator.py` provides `validate_extracted_entity()` and contamination filtering using:

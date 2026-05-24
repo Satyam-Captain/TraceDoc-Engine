@@ -15,6 +15,9 @@ _NUMBER_HEAVY_PATTERN = re.compile(r"^\d+[\.\)]\s+")
 
 _KNOWN_HEADING_PREFIXES = (
     "existing",
+    "design",
+    "design patterns",
+    "design pattern",
     "overview",
     "architecture",
     "architectures",

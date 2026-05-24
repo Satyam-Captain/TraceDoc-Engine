@@ -135,6 +135,8 @@ def _scoped_category_evidence_text(
     source_section = str(entry.get("section", ""))
     scoped_cards = _cards_for_category_section(cards, source_section)
     merged = architecture_evidence_text(scoped_cards if scoped_cards else cards)
+    if category == "architecture":
+        return merged
     return filter_text_to_category_sentences(merged, category, document_schema)
 
 
@@ -455,6 +457,8 @@ def compose_structured_answer(
     question: str,
     cards: list[EvidenceCard],
     document_schema: DocumentSchema | None = None,
+    *,
+    target_category: str | None = None,
 ) -> str | None:
     """
     Build a short extractive answer from evidence snippets when confident.
@@ -475,10 +479,24 @@ def compose_structured_answer(
     matched_category = None
     if document_schema is not None:
         from app.schema.discovery import match_question_to_schema_category
+        from app.schema.models import DiscoveredCategory
 
-        matched_category = match_question_to_schema_category(
-            question, document_schema
-        )
+        if target_category:
+            for category in document_schema.categories:
+                if category.normalized_name == target_category:
+                    matched_category = category
+                    break
+            if matched_category is None:
+                matched_category = DiscoveredCategory(
+                    name=target_category.replace("_", " "),
+                    normalized_name=target_category,
+                    source_section="",
+                    confidence_score=0.9,
+                )
+        else:
+            matched_category = match_question_to_schema_category(
+                question, document_schema
+            )
         if (
             matched_category is not None
             and matched_category.normalized_name != "architecture"
@@ -498,11 +516,18 @@ def compose_structured_answer(
             )
             return schema_answer
 
-    if "architect" in lower_question and (
-        matched_category is None
-        or matched_category.normalized_name == "architecture"
+    if target_category == "architecture" or (
+        "architect" in lower_question
+        and (
+            matched_category is None
+            or matched_category.normalized_name == "architecture"
+        )
     ):
-        architecture_text = architecture_evidence_text(cards)
+        architecture_text = _scoped_category_evidence_text(
+            cards, "architecture", document_schema
+        ) if document_schema else architecture_evidence_text(cards)
+        if not architecture_text.strip():
+            architecture_text = architecture_evidence_text(cards)
         architecture_answer = _compose_architecture_answer(
             architecture_text,
             document_schema=document_schema,
@@ -514,6 +539,9 @@ def compose_structured_answer(
         lineage_answer = _compose_lineage_answer(evidence_text)
         if lineage_answer:
             return lineage_answer
+
+    if matched_category is not None:
+        return None
 
     if not is_list_enumeration_question(question):
         return None

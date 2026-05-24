@@ -114,8 +114,13 @@ def extract_candidate_category(text: str) -> str | None:
     if not heading or heading in _WEAK_ONLY_HEADINGS:
         return None
 
+    if "design pattern" in heading:
+        return "design_pattern"
+
     for phrase, category in _SEMANTIC_PHRASE_MAP:
         if phrase in heading:
+            if category == "pattern" and "design" in heading:
+                continue
             return category
 
     tokens = [singularize_term(token) for token in heading.split() if token]
