@@ -18,9 +18,16 @@ from app.qa_context import (
 )
 from app.evidence.composer import NO_EVIDENCE_EXPLANATION, NO_EVIDENCE_MESSAGE
 from app.evidence.models import (
+    ANSWER_MODE_GRAPH_STRUCTURED,
     ANSWER_MODE_STRUCTURED_EXTRACTIVE,
     AnswerPackage,
     EvidenceCard,
+)
+from app.graph.answer_composer import (
+    compose_graph_answer,
+    graph_answer_debug_lines,
+    graph_matches_to_evidence_cards,
+    should_use_graph_answer,
 )
 from app.query import (
     build_retrieval_query,
@@ -28,7 +35,7 @@ from app.query import (
     interpret_query,
 )
 from app.query.models import QueryIntent
-from app.graph.matcher import graph_match_debug_lines, match_question_graph
+from app.graph.matcher import GraphMatch, graph_match_debug_lines, match_question_graph
 from app.question_graph import build_question_graph, question_graph_debug_lines
 from app.retrieval import (
     collect_section_chunks,
@@ -459,21 +466,54 @@ def ask_document(
             inferred_sections,
             document.file_name,
         )
+        graph_matches: list[GraphMatch] = []
+        graph_package: AnswerPackage | None = None
+        graph_answer = None
+        graph_answer_used = False
+
         knowledge_graph = load_knowledge_graph(db_path, document_id)
         if knowledge_graph is not None:
             debug_trace.append("graph_loaded=True")
             debug_trace.append(f"graph_node_count={len(knowledge_graph.nodes)}")
             debug_trace.append(f"graph_edge_count={len(knowledge_graph.edges)}")
             graph_matches = match_question_graph(
-                question_graph, knowledge_graph, top_k=5
+                question_graph, knowledge_graph, top_k=10
             )
             debug_trace.extend(graph_match_debug_lines(graph_matches))
+            graph_answer = compose_graph_answer(question_graph, graph_matches)
+            if should_use_graph_answer(question_graph, graph_answer):
+                assert graph_answer is not None
+                graph_cards = graph_matches_to_evidence_cards(
+                    graph_matches,
+                    document.file_name,
+                    max_cards=max(max_cards, 3),
+                )
+                if graph_cards:
+                    graph_package = AnswerPackage(
+                        question=question,
+                        answer_mode=ANSWER_MODE_GRAPH_STRUCTURED,
+                        cards=graph_cards,
+                        structured_answer=graph_answer.structured_answer,
+                        no_evidence_message=None,
+                        explanation=compose_intent_explanation(
+                            query_intent, graph_answer.explanation
+                        ),
+                    )
+                    graph_answer_used = True
         else:
             debug_trace.append("graph_loaded=False")
             debug_trace.append("graph_node_count=0")
             debug_trace.append("graph_edge_count=0")
             debug_trace.append("graph_matching_used=False")
             debug_trace.append("graph_match_count=0")
+
+        debug_trace.extend(
+            graph_answer_debug_lines(
+                graph_answer,
+                candidate=graph_answer is not None,
+                used=graph_answer_used,
+            )
+        )
         if document_schema is not None:
             category_names = sorted(
                 category.normalized_name for category in document_schema.categories
@@ -637,7 +677,9 @@ def ask_document(
             if target_category:
                 debug_trace.append(f"target_category={target_category}")
 
-        if section_package is not None:
+        if graph_package is not None:
+            package = graph_package
+        elif section_package is not None:
             package = section_package
         else:
             package = _apply_structured_answer(

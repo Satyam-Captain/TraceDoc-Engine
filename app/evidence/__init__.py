@@ -5,6 +5,7 @@ from app.evidence.context import expand_result_context, needs_context_expansion
 from app.evidence.highlighter import highlight_terms
 from app.evidence.models import (
     ANSWER_MODE_EVIDENCE_ONLY,
+    ANSWER_MODE_GRAPH_STRUCTURED,
     ANSWER_MODE_NO_EVIDENCE,
     ANSWER_MODE_STRUCTURED_EXTRACTIVE,
     AnswerPackage,
@@ -24,6 +25,7 @@ from app.evidence.selector import (
 
 __all__ = [
     "ANSWER_MODE_EVIDENCE_ONLY",
+    "ANSWER_MODE_GRAPH_STRUCTURED",
     "ANSWER_MODE_NO_EVIDENCE",
     "ANSWER_MODE_STRUCTURED_EXTRACTIVE",
     "AnswerPackage",

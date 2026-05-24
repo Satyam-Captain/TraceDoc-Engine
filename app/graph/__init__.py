@@ -6,6 +6,14 @@ from app.graph.extractor import (
     split_object_list,
 )
 from app.graph.models import GraphEdge, GraphNode, KnowledgeGraph, normalize_graph_label
+from app.graph.answer_composer import (
+    GraphAnswer,
+    compose_graph_answer,
+    graph_answer_debug_lines,
+    graph_matches_to_evidence_cards,
+    is_relationship_style_question,
+    should_use_graph_answer,
+)
 from app.graph.matcher import (
     GraphMatch,
     graph_match_debug_lines,
@@ -20,7 +28,13 @@ from app.graph.traversal import (
 )
 
 __all__ = [
+    "GraphAnswer",
     "GraphMatch",
+    "compose_graph_answer",
+    "graph_answer_debug_lines",
+    "graph_matches_to_evidence_cards",
+    "is_relationship_style_question",
+    "should_use_graph_answer",
     "GraphEdge",
     "GraphNode",
     "KnowledgeGraph",

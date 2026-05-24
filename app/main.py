@@ -228,7 +228,17 @@ def _render_question_section(db_path: str) -> None:
                 st.caption(answer.explanation)
                 return
 
-            if answer.answer_mode == "STRUCTURED_EXTRACTIVE" and answer.structured_answer:
+            if answer.answer_mode == "GRAPH_STRUCTURED" and answer.structured_answer:
+                st.markdown("### Graph-based answer")
+                st.info(
+                    "Composed deterministically from knowledge-graph matching — "
+                    "not an AI-generated answer."
+                )
+                st.markdown(answer.structured_answer)
+                st.divider()
+                st.markdown("### Supporting evidence")
+
+            elif answer.answer_mode == "STRUCTURED_EXTRACTIVE" and answer.structured_answer:
                 st.markdown("### Extractive answer")
                 st.info(
                     "Composed deterministically from retrieved document text — "

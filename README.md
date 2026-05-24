@@ -90,7 +90,13 @@ A future step will **match** the question graph against the document knowledge g
 - Category/list queries: nodes whose type/category match `architecture`, `design_pattern`, etc.
 - Definition queries: seed entity + `definition` / `refers_to` edges
 
-Scoring is deterministic (exact label, relation, category type, source sentence, section). Results appear in the QA debug trace (`graph_match_count`, `graph_top_match`, `graph_answer_entities`). **Answers still use the tree/section path**; graph matching is trace-only until the next integration step.
+Scoring is deterministic (exact label, relation, category type, source sentence, section). Results appear in the QA debug trace (`graph_match_count`, `graph_top_match`, `graph_answer_entities`).
+
+### Step 26: Graph-based answer composition
+
+Relationship-style questions (e.g. `What does X use?`, `What does X contain?`, `What implements Y?`) can now receive **`GRAPH_STRUCTURED`** answers when graph matches exceed a confidence threshold (default 8.0). Answers are numbered lists composed only from matched graph entities and source sentences — no LLM.
+
+Enumeration questions (`what architectures are mentioned?`, `what design patterns are mentioned?`) still prefer the **section/tree structured** path.
 
 ## Current capabilities
 
