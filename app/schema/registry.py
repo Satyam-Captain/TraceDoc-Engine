@@ -9,11 +9,13 @@ from typing import Any
 from app.schema.grammar_discovery import flexible_type_fragment
 from app.schema.models import DiscoveredPattern, DocumentSchema
 
+_OPTIONAL_MODIFIER = r"(?:(?:critical|important|common)\s+)?"
+
 _ORDINAL_PREFIXES: tuple[tuple[str, str], ...] = (
-    ("ordinal_first", r"(?i)the\s+first\s+{type}\s+is\s+(?:the\s+)?"),
-    ("ordinal_second", r"(?i)(?:a|the)\s+second\s+{type}\s+is\s+(?:the\s+)?"),
-    ("ordinal_third", r"(?i)(?:a|the)\s+third\s+{type}\s+is\s+(?:the\s+)?"),
-    ("ordinal_fourth", r"(?i)(?:a|the)\s+(?:fourth|fifth)\s+{type}\s+is\s+(?:the\s+)?"),
+    ("ordinal_first", r"(?i)the\s+first\s+{modifier}{type}\s+is\s+(?:the\s+)?"),
+    ("ordinal_second", r"(?i)(?:a|the)\s+second\s+{modifier}{type}\s+is\s+(?:the\s+)?"),
+    ("ordinal_third", r"(?i)(?:a|the)\s+third\s+{modifier}{type}\s+is\s+(?:the\s+)?"),
+    ("ordinal_fourth", r"(?i)(?:a|the)\s+(?:fourth|fifth)\s+{modifier}{type}\s+is\s+(?:the\s+)?"),
 )
 
 _STOP_LOOKAHEAD = (
@@ -47,7 +49,11 @@ def regexes_for_discovered_pattern(
         return compiled
 
     for label, prefix in _ORDINAL_PREFIXES:
-        expression = prefix.format(type=type_fragment) + r"(.+?)" + _STOP_LOOKAHEAD
+        expression = (
+            prefix.format(modifier=_OPTIONAL_MODIFIER, type=type_fragment)
+            + r"(.+?)"
+            + _STOP_LOOKAHEAD
+        )
         compiled.append((label, re.compile(expression)))
 
     return compiled

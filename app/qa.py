@@ -6,9 +6,11 @@ from dataclasses import dataclass, field
 
 from app.audit import log_audit_event
 from app.evidence import compose_answer_package, compose_structured_answer
+from app.evidence.extraction_runtime import execute_discovered_grammar_with_result
 from app.evidence.structured_composer import (
     architecture_evidence_text,
     architecture_extraction_trace,
+    grammar_execution_debug_lines,
 )
 from app.evidence.composer import NO_EVIDENCE_EXPLANATION, NO_EVIDENCE_MESSAGE
 from app.evidence.models import (
@@ -363,6 +365,7 @@ def ask_document(
         retrieval_query = build_retrieval_query(question, query_intent)
         chunks = get_chunks_for_document(db_path, document_id)
         document_schema = load_document_schema(db_path, document_id)
+        matched_schema_category = None
         debug_trace: list[str] = [
             f"intent_type={query_intent.intent_type}",
             f"retrieval_query={retrieval_query!r}",
@@ -409,6 +412,20 @@ def ask_document(
                     debug_trace.append(
                         f"grammar_sentence_templates=[{template_preview}]"
                     )
+                    section_chunks = [
+                        chunk
+                        for chunk in chunks
+                        if chunk.section_title
+                        and matched_schema_category.source_section.lower()
+                        in chunk.section_title.lower()
+                    ]
+                    grammar_text = "\n".join(
+                        chunk.text for chunk in (section_chunks or chunks)
+                    )
+                    grammar_result = execute_discovered_grammar_with_result(
+                        grammar_text, grammar
+                    )
+                    debug_trace.extend(grammar_execution_debug_lines(grammar_result))
         search_results: list[SearchResult] = []
         section_retrieval_used = False
         retrieved_section_title: str | None = None

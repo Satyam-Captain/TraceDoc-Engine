@@ -15,6 +15,15 @@ from app.evidence.structured_composer import (
     compose_structured_answer,
     is_list_enumeration_question,
 )
+from app.schema.discovery import discover_document_schema
+from app.structure import structure_document
+
+DESIGN_PATTERN_TEXT = (
+    "Design patterns for implementation\n\n"
+    "The first critical design pattern is section-aware ingestion.\n"
+    "The second pattern is multi-granular indexing.\n"
+    "The third pattern is deterministic query interpretation.\n"
+)
 
 REAL_PDF_STYLE_SECTION = (
     "The most common pre-generative architecture is the enterprise search stack: "
@@ -227,6 +236,48 @@ def test_real_section_structured_composer_lists_all_four() -> None:
     assert "2. Classic QA pipeline" in answer
     assert "3. Ontology and knowledge-graph stack" in answer
     assert "4. Traceability and citation graph" in answer
+
+
+def test_design_patterns_structured_answer_uses_grammar_execution() -> None:
+    sections, chunks = structure_document("design.txt", DESIGN_PATTERN_TEXT)
+    schema = discover_document_schema(1, sections, chunks)
+    cards = [
+        _card(
+            "The first critical design pattern is section-aware ingestion.\n"
+            "The second pattern is multi-granular indexing.\n"
+            "The third pattern is deterministic query interpretation.",
+            chunk_id="c-design",
+        ),
+    ]
+    answer = compose_structured_answer(
+        "what design patterns are mentioned?",
+        cards,
+        document_schema=schema,
+    )
+
+    assert answer is not None
+    assert "1. Section-aware ingestion" in answer
+    assert "2. Multi-granular indexing" in answer
+    assert "3. Deterministic query interpretation" in answer
+    assert "mentions these design patterns" in answer.lower()
+    assert "Supporting evidence:" in answer
+
+
+def test_design_patterns_question_debug_trace_has_grammar_execution(tmp_path: Path) -> None:
+    source = tmp_path / "design_runtime.txt"
+    db_path = tmp_path / "tracedoc.db"
+    source.write_text(DESIGN_PATTERN_TEXT, encoding="utf-8")
+    processed = process_document(str(source), db_path=str(db_path))
+    answer = ask_document(
+        "what design patterns are mentioned?",
+        processed.document_id,
+        db_path=str(db_path),
+    )
+
+    trace = "\n".join(answer.debug_trace)
+    assert answer.structured_answer is not None
+    assert "grammar_execution_success=True" in trace
+    assert "1. Section-aware ingestion" in answer.structured_answer
 
 
 def test_section_searcher_and_chunk_collection() -> None:

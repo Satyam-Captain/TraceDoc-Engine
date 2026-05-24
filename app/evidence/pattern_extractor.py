@@ -301,31 +301,34 @@ def extract_using_discovered_grammar(
     discovered_pattern: object,
 ) -> list[ExtractedPhrase]:
     """Extract entity phrases using one discovered grammar definition."""
+    from app.evidence.extraction_runtime import execute_discovered_grammar_with_result
     from app.schema.models import DiscoveredPattern
-    from app.schema.registry import regexes_for_discovered_pattern
 
     if not isinstance(discovered_pattern, DiscoveredPattern):
+        return []
+
+    result = execute_discovered_grammar_with_result(text, discovered_pattern)
+    if not result.entities:
         return []
 
     source_lower = text.lower()
     sentences = split_sentences(text)
     candidates: list[tuple[int, ExtractedPhrase]] = []
+    pattern_name = discovered_pattern.pattern_name
 
-    for pattern_label, regex in regexes_for_discovered_pattern(discovered_pattern):
-        for sentence in sentences:
-            match = regex.search(sentence)
-            if not match:
-                continue
-            sentence_offset = text.find(sentence)
-            base = sentence_offset if sentence_offset >= 0 else 0
-            _add_candidate(
-                candidates,
-                position=base + match.start(),
-                value=match.group(1),
-                source_sentence=sentence,
-                pattern_name=discovered_pattern.pattern_name or pattern_label,
-                source_lower=source_lower,
-            )
+    for entity in result.entities:
+        position = source_lower.find(entity.lower())
+        source_sentence = ""
+        if position >= 0:
+            source_sentence = _sentence_for_match(text, position, sentences)
+        _add_candidate(
+            candidates,
+            position=position if position >= 0 else len(candidates),
+            value=entity,
+            source_sentence=source_sentence or entity,
+            pattern_name=pattern_name,
+            source_lower=source_lower,
+        )
 
     return _dedupe_by_position(candidates)
 

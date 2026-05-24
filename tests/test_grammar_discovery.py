@@ -117,6 +117,9 @@ def test_design_patterns_question_end_to_end(tmp_path: Path) -> None:
     assert "grammar_confidence=" in trace
     assert "grammar_sentence_templates=" in trace
     assert "schema_patterns=[ordinal_design_pattern]" in trace
+    assert "grammar_execution_success=True" in trace
+    assert "extracted_entities_count=3" in trace
+    assert "section-aware ingestion" in trace.lower()
 
 
 def test_extract_enumerated_phrases_via_schema_grammar() -> None:

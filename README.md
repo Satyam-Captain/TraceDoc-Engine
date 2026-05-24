@@ -129,6 +129,12 @@ PDF text extraction often loses markdown-style structure, so headings like *Exis
 
 Sample: `samples/pdf_style_document.txt`
 
+## Step 21.3: Grammar execution runtime
+
+Discovered grammars are now **executable** via `app/evidence/extraction_runtime.py`. The runtime compiles ordinal sentence templates (with optional modifiers such as *critical*, *important*, *common*) into deterministic regexes, extracts `<ENTITY>` values in document order, deduplicates, and reports `extraction_confidence`.
+
+`pattern_extractor.py` and `structured_composer.py` call `execute_discovered_grammar()` so structured answers list extracted entities (numbered list) instead of raw evidence chunks alone. Supporting evidence citations are appended below the structured list. Debug trace may include `grammar_execution_success`, `extracted_entities_count`, `extracted_entities`, and `extraction_confidence`.
+
 ## Step 21.2: Dynamic symbolic grammar discovery
 
 After semantic categories are discovered, TraceDoc inspects section text for **repeated extraction grammars** (for example ordinal enumeration: `The first … is …`, `The second … is …`). Grammars are clustered into families such as `ordinal_pattern_enumeration` and stored as `DiscoveredPattern` metadata (`sentence_templates`, `type_phrases`, `confidence_score`).

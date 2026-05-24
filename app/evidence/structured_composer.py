@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import re
 
+from app.evidence.extraction_runtime import (
+    GrammarExecutionResult,
+    execute_discovered_grammar_with_result,
+)
 from app.evidence.models import EvidenceCard
 from app.evidence.pattern_extractor import (
     extract_enumerated_phrases,
     extract_enumerated_phrases_with_trace,
 )
 from app.evidence.sentence_splitter import split_sentences
-from app.schema.models import DocumentSchema
+from app.schema.models import DiscoveredPattern, DocumentSchema
 
 _PLURAL_TARGETS = (
     "architectures",
@@ -102,6 +106,65 @@ def architecture_evidence_text(cards: list[EvidenceCard]) -> str:
     return "\n".join(split_sentences(merged))
 
 
+def _category_display_label(category: str) -> str:
+    """Human-readable label for a normalized schema category key."""
+    return category.replace("_", " ")
+
+
+def _grammar_list_intro(category: str, *, count: int) -> str:
+    label = _category_display_label(category)
+    if count == 1:
+        return f"The document mentions this {label}:"
+    return f"The document mentions these {label}s:"
+
+
+def _compose_entity_list_answer(intro: str, entities: list[str]) -> str:
+    lines = [intro]
+    lines.extend(f"{index}. {item}" for index, item in enumerate(entities, start=1))
+    return "\n".join(lines)
+
+
+def _append_supporting_evidence(answer: str, cards: list[EvidenceCard]) -> str:
+    if not cards:
+        return answer
+    lines = [answer, "", "Supporting evidence:"]
+    for index, card in enumerate(cards[:4], start=1):
+        preview = card.snippet.replace("[[", "").replace("]]", "")
+        preview = re.sub(r"\s+", " ", preview).strip()
+        if len(preview) > 160:
+            preview = preview[:157] + "..."
+        lines.append(f"- ({index}) {card.citation}: {preview}")
+    return "\n".join(lines)
+
+
+def compose_grammar_driven_answer(
+    evidence_text: str,
+    category: str,
+    grammar: DiscoveredPattern,
+    *,
+    cards: list[EvidenceCard] | None = None,
+    include_supporting_evidence: bool = True,
+) -> tuple[str | None, GrammarExecutionResult | None]:
+    """
+    Build a numbered list answer by executing a discovered grammar on evidence text.
+
+    Returns (answer_text, execution_result).
+    """
+    result = execute_discovered_grammar_with_result(evidence_text, grammar)
+    if not result.success or not result.entities:
+        return None, result
+
+    min_entities = 1 if result.extraction_confidence >= 0.65 else 2
+    if len(result.entities) < min_entities:
+        return None, result
+
+    intro = _grammar_list_intro(category, count=len(result.entities))
+    answer = _compose_entity_list_answer(intro, result.entities)
+    if include_supporting_evidence and cards:
+        answer = _append_supporting_evidence(answer, cards)
+    return answer, result
+
+
 def _compose_architecture_answer(
     evidence_text: str,
     document_schema: DocumentSchema | None = None,
@@ -123,23 +186,37 @@ def _compose_schema_category_answer(
     evidence_text: str,
     category: str,
     document_schema: DocumentSchema,
-) -> str | None:
+    *,
+    cards: list[EvidenceCard] | None = None,
+) -> tuple[str | None, GrammarExecutionResult | None]:
+    from app.schema.registry import primary_grammar_for_category
+
+    grammar = primary_grammar_for_category(document_schema, category)
+    if grammar is not None:
+        answer, result = compose_grammar_driven_answer(
+            evidence_text,
+            category,
+            grammar,
+            cards=cards,
+            include_supporting_evidence=True,
+        )
+        if answer:
+            return answer, result
+
     found = extract_enumerated_phrases(
         evidence_text,
         category,
         document_schema=document_schema,
     )
     if len(found) < 2:
-        return None
+        return None, None
 
-    if category == "design_pattern":
-        intro = "The document mentions these design patterns:"
-    else:
-        label = category.replace("_", " ")
-        intro = f"The document describes these {label} items:"
-    lines = [intro]
-    lines.extend(f"{index}. {item}" for index, item in enumerate(found, start=1))
-    return "\n".join(lines)
+    label = _category_display_label(category)
+    intro = f"The document describes these {label} items:"
+    answer = _compose_entity_list_answer(intro, found)
+    if cards:
+        answer = _append_supporting_evidence(answer, cards)
+    return answer, None
 
 
 def architecture_extraction_trace(evidence_text: str) -> list[str]:
@@ -158,6 +235,21 @@ def architecture_extraction_trace(evidence_text: str) -> list[str]:
                 f"inference=explicit_pattern source={entry.source_sentence[:120]}"
             )
     return lines
+
+
+def grammar_execution_debug_lines(
+    result: GrammarExecutionResult | None,
+) -> list[str]:
+    """Debug trace lines for grammar execution."""
+    if result is None:
+        return ["grammar_execution_success=False", "extracted_entities_count=0"]
+    entities_preview = ", ".join(result.entities[:8])
+    return [
+        f"grammar_execution_success={str(result.success)}",
+        f"extracted_entities_count={result.match_count}",
+        f"extracted_entities=[{entities_preview}]",
+        f"extraction_confidence={result.extraction_confidence:.2f}",
+    ]
 
 
 def _compose_lineage_answer(evidence_text: str) -> str | None:
@@ -276,10 +368,11 @@ def compose_structured_answer(
             and matched_category.normalized_name != "architecture"
         ):
             schema_text = architecture_evidence_text(cards)
-            schema_answer = _compose_schema_category_answer(
+            schema_answer, _ = _compose_schema_category_answer(
                 schema_text,
                 matched_category.normalized_name,
                 document_schema,
+                cards=cards,
             )
             if schema_answer:
                 return schema_answer
