@@ -288,6 +288,31 @@ No AI, LLM, embeddings, or external APIs are used.
 python -m pytest
 ```
 
+## Step 12: Rule-based query interpreter
+
+Before retrieval, TraceDoc classifies each question with **deterministic regex and string rules**—no LLM, embeddings, or NLP libraries.
+
+**Intent types:** `DEFINITION_LOOKUP`, `WHERE_MENTIONED`, `LIST_REQUEST`, `COMPARISON`, `TABLE_LOOKUP`, `REQUIREMENT_REFERENCE`, `GENERAL_SEARCH`
+
+**Integration:** `ask_document()` calls `interpret_query()`, attaches `query_intent` to results, shapes the retrieval query lightly (for example definition-boost terms), and shows intent in the Streamlit UI.
+
+This makes the system easier to reason about and tune without generative AI.
+
+**Usage (Python):**
+
+```python
+from app.query import interpret_query
+
+intent = interpret_query("What is REQ-001?")
+print(intent.intent_type, intent.entities, intent.explanation)
+```
+
+**Run tests:**
+
+```bash
+python -m pytest
+```
+
 ## Layout
 
 - `app/` — ingestion, structure, indexing, query, retrieval, evidence, audit, storage

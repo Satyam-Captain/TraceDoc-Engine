@@ -8,6 +8,12 @@ from app.audit import log_audit_event
 from app.evidence import compose_answer_package
 from app.evidence.composer import NO_EVIDENCE_EXPLANATION, NO_EVIDENCE_MESSAGE
 from app.evidence.models import EvidenceCard
+from app.query import (
+    build_retrieval_query,
+    compose_intent_explanation,
+    interpret_query,
+)
+from app.query.models import QueryIntent
 from app.retrieval import search_chunks
 from app.retrieval.models import SearchResult
 from app.storage import (
@@ -30,6 +36,7 @@ class DocumentQAResult:
     cards: list[EvidenceCard] = field(default_factory=list)
     no_evidence_message: str | None = None
     explanation: str = ""
+    query_intent: QueryIntent | None = None
 
 
 @dataclass
@@ -48,7 +55,9 @@ def _no_evidence_result(
     question: str,
     document_id: int,
     document_name: str,
+    query_intent: QueryIntent | None = None,
 ) -> DocumentQAResult:
+    intent = query_intent or interpret_query(question)
     return DocumentQAResult(
         question=question,
         document_id=document_id,
@@ -56,7 +65,8 @@ def _no_evidence_result(
         answer_mode="NO_EVIDENCE",
         cards=[],
         no_evidence_message=NO_EVIDENCE_MESSAGE,
-        explanation=NO_EVIDENCE_EXPLANATION,
+        explanation=compose_intent_explanation(intent, NO_EVIDENCE_EXPLANATION),
+        query_intent=intent,
     )
 
 
@@ -128,8 +138,12 @@ def ask_document(
 
         document_name = document.file_name
 
+        query_intent = interpret_query(question)
+
         if not question.strip():
-            result = _no_evidence_result(question, document_id, document.file_name)
+            result = _no_evidence_result(
+                question, document_id, document.file_name, query_intent=query_intent
+            )
             log_audit_event(
                 db_path,
                 "question_asked",
@@ -148,8 +162,9 @@ def ask_document(
 
         index = load_index_for_document(db_path, document_id)
         bm25_stats = load_bm25_statistics(db_path, document_id)
+        retrieval_query = build_retrieval_query(question, query_intent)
         search_results = search_chunks(
-            question, index, bm25_stats, top_k=top_k
+            retrieval_query, index, bm25_stats, top_k=top_k
         )
         package = compose_answer_package(
             question, search_results, max_cards=max_cards
@@ -162,7 +177,8 @@ def ask_document(
             answer_mode=package.answer_mode,
             cards=package.cards,
             no_evidence_message=package.no_evidence_message,
-            explanation=package.explanation,
+            explanation=compose_intent_explanation(query_intent, package.explanation),
+            query_intent=query_intent,
         )
 
         log_audit_event(

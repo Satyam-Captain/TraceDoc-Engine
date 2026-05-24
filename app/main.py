@@ -159,6 +159,15 @@ def _render_question_section(db_path: str) -> None:
             with st.spinner("Searching evidence..."):
                 answer = ask_document(question, document_id, db_path=db_path)
 
+            if answer.query_intent is not None:
+                st.markdown("**Detected intent**")
+                st.markdown(f"- **Intent type:** `{answer.query_intent.intent_type}`")
+                st.markdown(f"- **Explanation:** {answer.query_intent.explanation}")
+                if answer.query_intent.entities:
+                    st.markdown(
+                        f"- **Entities:** {', '.join(answer.query_intent.entities)}"
+                    )
+
             if answer.answer_mode == "NO_EVIDENCE":
                 st.warning(answer.no_evidence_message or "No evidence found.")
                 st.caption(answer.explanation)
