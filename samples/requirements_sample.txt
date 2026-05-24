@@ -1,0 +1,27 @@
+# System Requirements Specification
+
+## 1. Scope
+
+This document defines mandatory requirements for the HPC6 platform.
+
+## 2. Functional Requirements
+
+### REQ-001 Memory Declaration
+
+The job scheduler shall require an explicit memory declaration for every submitted job.
+Verification: audit logs must contain the declared memory value.
+
+### REQ-002 CPU Binding Enforcement
+
+The runtime must bind each MPI rank to an isolated CPU set before execution.
+Operators must verify binding during acceptance testing.
+
+### REQ-003 Storage Cleanup
+
+Users must remove local scratch files when jobs complete.
+The platform shall send reminders for orphaned scratch data older than 24 hours.
+
+## 3. Compliance Notes
+
+All requirements use shall or must language where marked mandatory.
+REQ-001 through REQ-003 are subject to annual review.

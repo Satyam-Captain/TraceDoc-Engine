@@ -1,0 +1,42 @@
+# HPC6 Cluster Policy
+
+## 1. HPC6 Overview
+
+The HPC6 cluster provides high-performance compute for engineering workloads.
+All users must follow the policies in this document.
+
+## 2. Memory Policy
+
+HPC6 memory is provisioned at 256 GB per standard compute node.
+Applications must declare peak memory usage in job submission scripts.
+The scheduler rejects jobs that exceed the declared HPC6 memory limit.
+
+## 3. CPU Binding
+
+CPU binding is required for all MPI workloads.
+Each rank must be pinned to a dedicated core set.
+Where is CPU binding mentioned in runbooks, operators must verify binding before production release.
+
+## 4. Storage Policy
+
+### 4.1 Local NVMe Storage
+
+Each node includes local NVMe storage for scratch I/O.
+Scratch data is deleted after job completion unless explicitly staged.
+
+### 4.2 Shared Filesystem
+
+GPFS is the shared filesystem for project data and home directories.
+Users must not run heavy metadata operations on GPFS mount points.
+
+### 4.3 Storage Comparison Table
+
+Tier | Path | Use Case | Retention
+Local NVMe | /scratch/local | Burst I/O | Job lifetime
+GPFS | /gpfs/projects | Shared datasets | Project policy
+Archive | /gpfs/archive | Long-term retention | 90 days
+
+## 5. User Responsibilities
+
+Users must monitor memory usage, honor CPU binding rules, and clean scratch files.
+Violations are logged and may result in account suspension.

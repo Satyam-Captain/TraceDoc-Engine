@@ -36,6 +36,8 @@ data/uploads/*
 !data/uploads/.gitkeep
 data/index/*
 !data/index/.gitkeep
+data/tracedoc.db
+data/demo_tracedoc.db
 
 # OS
 .DS_Store

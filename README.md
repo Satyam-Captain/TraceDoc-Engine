@@ -1,322 +1,163 @@
 # TraceDoc Engine
 
-A local, deterministic document question-answering system.
+**Deterministic evidence-based document QA engine** for local laptops.
 
-No LLMs, ML models, embeddings, or external APIs — runs entirely on your laptop.
+TraceDoc ingests PDF, DOCX, and TXT files, builds a lexical index, and returns **citation-first evidence cards** for each question. Every result traces to source text with line anchors—no generated prose answer.
 
-## Status
+## What it is
 
-Project initialized. Implementation steps follow the architecture in `docs/architecture.md`.
+- A **classical information retrieval** pipeline: ingest → structure → chunk → index → BM25 search → evidence cards
+- A **local SQLite** persistence layer with audit events
+- A **rule-based query interpreter** for deterministic intent detection
+- A minimal **Streamlit UI** for upload, process, ask, and traceability
 
-## Step 2: Document ingestion
+## What it is not
 
-Deterministic ingestion extracts raw text and metadata from local files. No AI, LLM, embeddings, or external APIs are used.
+- Not an LLM or chatbot
+- Not semantic / vector search (no embeddings)
+- Not a cloud service (no external APIs required)
+- Not a system that invents answers—it shows retrieved evidence only
 
-**Supported file types:** `.pdf`, `.docx`, `.txt`
+## No-AI guarantees
 
-**Usage (Python):**
+| Excluded | Used instead |
+|----------|----------------|
+| LLM / generative AI | Deterministic snippets from source chunks |
+| ML rankers / classifiers | BM25 + explicit rules |
+| Embeddings / vector DB | Inverted lexical index |
+| External APIs | Local `sqlite3` and file I/O |
 
-```python
-from app.ingestion import extract_document
+## Architecture summary
 
-result = extract_document("path/to/document.pdf")
-print(result.text, result.checksum_sha256, result.extraction_warnings)
+```
+Upload → Ingestion → Structure/Chunking → Lexical Index → SQLite
+                                              ↓
+Question → Query Interpreter → BM25 Retrieval → Evidence Cards
+                                              ↓
+                                    Audit log (append-only)
 ```
 
-**Run tests:**
+Full logical architecture: [`docs/architecture.md`](docs/architecture.md) and [`docs/architecture.drawio`](docs/architecture.drawio).
+
+## Current capabilities
+
+| Layer | Module | Description |
+|-------|--------|-------------|
+| Ingestion | `app/ingestion/` | PDF, DOCX, TXT extraction + SHA-256 |
+| Structure | `app/structure/` | Heading detection, line-anchored chunks |
+| Indexing | `app/indexing/` | Tokenization, inverted index, BM25 stats |
+| Retrieval | `app/retrieval/` | Deterministic BM25 ranking |
+| Evidence | `app/evidence/` | Evidence cards with citations |
+| Storage | `app/storage/` | SQLite persistence |
+| Pipeline | `app/pipeline.py` | `process_document()` end-to-end |
+| Q&A | `app/qa.py` | `ask_document()` orchestration |
+| Query | `app/query/` | Rule-based intent detection |
+| Audit | `app/audit/` | Append-only event logging |
+| UI | `app/main.py` | Streamlit demo |
+
+## Quick start
 
 ```bash
+git clone https://github.com/Satyam-Captain/TraceDoc-Engine.git
+cd TraceDoc-Engine
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1          # Windows
 pip install -r requirements.txt
-pytest
 ```
 
-## Step 3: Structure extraction and chunking
-
-After ingestion, TraceDoc converts raw text into **sections** and **line-anchored chunks** using deterministic rules only. No AI, LLM, embeddings, or external APIs are used.
-
-**Heading detection** uses explainable patterns (markdown `#` headings, numbered outlines like `1.1 Scope`, uppercase titles, `Appendix A`, `Section 4`, and numbered titles like `4 Requirements`).
-
-**Chunking** preserves original line numbers, prefers section and paragraph boundaries, and only splits inside a paragraph when it exceeds `max_chars` (default `1200`). Chunks carry stable IDs and optional `section_id` / `section_title` for evidence anchors.
-
-Chunking is required before indexing so retrieval can return precise, citable spans instead of whole documents.
-
-**Usage (Python):**
-
-```python
-from app.structure import structure_document
-
-sections, chunks = structure_document("report.pdf", extracted_text)
-print(len(sections), len(chunks), chunks[0].chunk_id)
-```
-
-**Run tests:**
+## Run tests
 
 ```bash
 python -m pytest
 ```
 
-## Step 4: Knowledge preparation and lexical indexing
+## Run smoke test
 
-The Knowledge Preparation Layer turns structured chunks into **classical IR artifacts**: tokenized terms, an inverted index, and BM25 statistics. This is deterministic lexical search—not semantic search. No embeddings, vector databases, AI models, or external APIs are used.
-
-**Techniques:**
-- **Tokenization & normalization** — explainable splitting; preserves identifiers like `REQ-001`, `HPC6`, `ISO27001`
-- **Stopwords** — configurable filtering (off by default during indexing)
-- **Inverted index** — `term → chunk` postings with frequencies and positions
-- **BM25 preparation** — document frequency (df), inverse document frequency (idf), and average chunk length (avgdl) for a later retrieval step
-
-Every indexed term maps to explicit chunk evidence, making ranking auditable and reproducible on a laptop.
-
-**Usage (Python):**
-
-```python
-from app.indexing import prepare_document_chunks
-from app.structure import structure_document
-
-_, chunks = structure_document("policy.txt", extracted_text)
-index, bm25_stats = prepare_document_chunks(chunks)
-print(index.vocabulary_size, bm25_stats["avgdl"])
-```
-
-**Run tests:**
+Repeatable demo validation (pytest + sample docs + four questions):
 
 ```bash
-python -m pytest
+python scripts/smoke_test.py
 ```
 
-## Step 5: Deterministic retrieval/search
+Uses `data/demo_tracedoc.db` and sample files under `samples/`.
 
-The Deterministic Retrieval Core accepts a plain-text query, prepares lexical terms (tokenize, normalize, stopword removal with fallback), looks up candidates in the inverted index, and ranks chunks with **BM25**. No AI, embeddings, vector search, or external APIs are involved.
-
-**Query preparation** reuses the indexing tokenizer/normalizer and drops common stopwords unless that would leave an empty query.
-
-**Scoring** applies the standard BM25 formula using precomputed `df`, `idf`, and `avgdl` from Step 4. Each result includes `matched_terms`, per-term scores, and a `why_matched` explanation for auditability.
-
-**Usage (Python):**
-
-```python
-from app.indexing import prepare_document_chunks
-from app.retrieval import search_chunks
-
-index, bm25_stats = prepare_document_chunks(chunks)
-results = search_chunks("HPC6 memory requirements", index, bm25_stats, top_k=5)
-for hit in results:
-    print(hit.score, hit.text, hit.why_matched)
-```
-
-**Run tests:**
+## Run Streamlit app
 
 ```bash
-python -m pytest
+streamlit run app/main.py
 ```
 
-## Step 6: Local SQLite storage and index persistence
+1. Upload a document (or use files from `samples/`)
+2. Process into the local database
+3. Select a document and ask a question
+4. Review **evidence cards** (not an AI answer) and the audit log
 
-The Local Storage Layer persists documents, sections, chunks, lexical index postings, BM25 statistics, and audit events in a single **SQLite** database (`sqlite3` only — no ORM). All data stays on disk under your project path (for example `data/index/tracedoc.db`).
+## Demo script (architect briefing)
 
-**Tables:** `documents`, `sections`, `chunks`, `index_terms`, `chunk_term_frequencies`, `bm25_statistics`, `audit_events`
+Suggested flow—details in [`docs/demo_walkthrough.md`](docs/demo_walkthrough.md):
 
-**Duplicate handling:** the same `checksum_sha256` is not stored twice; `save_document_bundle` returns the existing document id.
+1. Show **constraints** in the UI sidebar (no LLM, local-only).
+2. Run `python scripts/smoke_test.py` to prove the pipeline end-to-end.
+3. Open Streamlit; process `samples/hpc6_policy.txt`.
+4. Ask: *What is HPC6 memory policy?* — show intent + evidence card + citation.
+5. Ask: *What is REQ-001?* on `samples/requirements_sample.txt` — show requirement ID handling.
+6. Open **Audit / Traceability** — show `document_processed` and `question_asked` events.
 
-**Usage (Python):**
+**Sample questions**
 
-```python
-from app.storage import (
-    initialize_database,
-    save_document_bundle,
-    save_index_bundle,
-    load_index_for_document,
-    load_bm25_statistics,
-)
-from app.indexing import prepare_document_chunks
-from app.structure import structure_document
+- What is HPC6 memory policy?
+- Where is CPU binding mentioned?
+- What is REQ-001?
+- List all storage rules
 
-db_path = "data/index/tracedoc.db"
-initialize_database(db_path)
+## Sample documents
 
-sections, chunks = structure_document("policy.txt", text)
-document_id, created = save_document_bundle(db_path, extraction, sections, chunks)
-index, bm25_stats = prepare_document_chunks(chunks)
-save_index_bundle(db_path, document_id, index, bm25_stats)
+| File | Purpose |
+|------|---------|
+| [`samples/hpc6_policy.txt`](samples/hpc6_policy.txt) | HPC6 memory, CPU binding, NVMe, GPFS, table rows |
+| [`samples/requirements_sample.txt`](samples/requirements_sample.txt) | REQ-001..003, shall/must language |
 
-loaded_index = load_index_for_document(db_path, document_id)
-loaded_stats = load_bm25_statistics(db_path, document_id)
-```
-
-**Run tests:**
-
-```bash
-python -m pytest
-```
-
-## Step 7: End-to-end document processing pipeline
-
-`process_document()` orchestrates the full deterministic backend flow in one call:
-
-**ingest → structure → chunk → index → persist**
-
-No AI, LLM, embeddings, or external APIs are used. The SQLite database stores the document bundle and lexical index. Duplicate files (same SHA-256 checksum) return `duplicate=True` and reuse the existing `document_id` without creating duplicate rows.
-
-**Usage (Python):**
-
-```python
-from app.pipeline import process_document
-
-result = process_document("data/uploads/policy.txt", db_path="data/tracedoc.db")
-print(result.document_id, result.chunk_count, result.duplicate, result.warnings)
-```
-
-**Batch processing:**
-
-```python
-from app.pipeline import process_documents
-
-results = process_documents(["doc1.txt", "doc2.pdf"], db_path="data/tracedoc.db")
-```
-
-**Run tests:**
-
-```bash
-python -m pytest
-```
-
-## Step 8: Evidence engine and answer cards
-
-The Evidence Engine and Answer Card Composer turn BM25 search hits into **citation-first, evidence-only** responses. TraceDoc does not generate ChatGPT-style prose; it returns exact snippets from uploaded documents with line anchors and match explanations.
-
-**Features:**
-- **Evidence selection** — filter by score, deduplicate normalized snippets, keep top cards
-- **Snippets** — full chunk text, trimmed around the first matched term when over 700 characters
-- **Highlighting** — `[[term]]` markers with original casing preserved
-- **Confidence** — `HIGH` / `MEDIUM` / `LOW` from BM25 score and matched-term count
-- **Citations** — `document | section: … | lines start-end`
-
-This design prevents hallucination: every visible statement traces to a retrieved chunk. No AI, LLM, or embeddings are used.
-
-**Usage (Python):**
-
-```python
-from app.evidence import compose_answer_package
-from app.retrieval import search_chunks
-
-results = search_chunks("HPC6 memory", index, bm25_stats, top_k=5)
-package = compose_answer_package("What are the HPC6 memory requirements?", results)
-
-for card in package.cards:
-    print(card.confidence, card.citation, card.snippet)
-```
-
-**Run tests:**
-
-```bash
-python -m pytest
-```
-
-## Step 9: Document question-answer orchestration
-
-`ask_document()` connects the **Local Storage Layer**, **Deterministic Retrieval Core**, and **Evidence Engine** into one backend call:
-
-**load document → load index & BM25 → search → compose evidence cards**
-
-Responses are **evidence-only** (`EVIDENCE_ONLY` or `NO_EVIDENCE`). No generative answer text is produced. No AI, LLM, embeddings, or external APIs are used.
-
-**Usage (Python):**
+## Python API (minimal)
 
 ```python
 from app.pipeline import process_document
 from app.qa import ask_document
 
-process_result = process_document("data/uploads/policy.txt", db_path="data/tracedoc.db")
+result = process_document("samples/hpc6_policy.txt", db_path="data/tracedoc.db")
 answer = ask_document(
-    "What are the HPC6 memory requirements?",
-    process_result.document_id,
+    "What is HPC6 memory policy?",
+    result.document_id,
     db_path="data/tracedoc.db",
 )
-
 for card in answer.cards:
     print(card.confidence, card.citation, card.snippet)
 ```
 
-**Run tests:**
+## Limitations
 
-```bash
-python -m pytest
+- Single-machine, single-user focus in v1
+- Lexical matching only (no synonym expansion or embeddings)
+- No generative summarization or multi-hop reasoning
+- PDF/DOCX extraction quality depends on source formatting
+- Multi-document Q&A is limited to simple orchestration helpers
+
+## Future enterprise path
+
+Documented in architecture as out-of-scope for v1: SSO/RBAC, multi-tenant storage, central policy service, enterprise connectors (SharePoint, Confluence), observability export. The deterministic core remains unchanged.
+
+## Project layout
+
+```
+tracedoc-engine/
+  app/           Application code
+  config/        Configuration placeholders
+  data/          Local DB and uploads (gitignored contents)
+  docs/          Architecture and demo walkthrough
+  samples/       Demo TXT documents
+  scripts/       smoke_test.py
+  tests/         Pytest suite
 ```
 
-## Step 10: Local Streamlit UI
+## License / status
 
-A minimal local UI exposes the deterministic backend:
-
-1. **Upload** a PDF, DOCX, or TXT file (saved under `data/uploads/`)
-2. **Process** via `process_document()` into `data/tracedoc.db`
-3. **Select** an indexed document
-4. **Ask a question** and view **evidence cards** (not an AI-generated answer)
-
-No LLM, embeddings, vector search, or external APIs are used.
-
-**Run the app:**
-
-```bash
-pip install -r requirements.txt
-streamlit run app/main.py
-```
-
-**Run tests:**
-
-```bash
-python -m pytest
-```
-
-## Step 11: Audit logging and traceability
-
-TraceDoc records **append-only audit events** in SQLite for document processing and question-answer activity. The Streamlit UI includes an **Audit / Traceability** section showing timestamps, event types, and JSON details.
-
-**Why it matters:** regulated and audit-heavy environments need reproducible, inspectable actions—not black-box AI responses. Every process and query leaves a local trail without external services.
-
-**Logged events:**
-- `document_processed` — successful ingest/index pipeline
-- `duplicate_document_detected` — checksum already present
-- `document_processing_failed` — processing error (message only, no stack trace in UI)
-- `question_asked` — evidence search completed (includes `answer_mode`, card count, top score)
-- `question_failed` — Q&A error
-
-No AI, LLM, embeddings, or external APIs are used.
-
-**Run tests:**
-
-```bash
-python -m pytest
-```
-
-## Step 12: Rule-based query interpreter
-
-Before retrieval, TraceDoc classifies each question with **deterministic regex and string rules**—no LLM, embeddings, or NLP libraries.
-
-**Intent types:** `DEFINITION_LOOKUP`, `WHERE_MENTIONED`, `LIST_REQUEST`, `COMPARISON`, `TABLE_LOOKUP`, `REQUIREMENT_REFERENCE`, `GENERAL_SEARCH`
-
-**Integration:** `ask_document()` calls `interpret_query()`, attaches `query_intent` to results, shapes the retrieval query lightly (for example definition-boost terms), and shows intent in the Streamlit UI.
-
-This makes the system easier to reason about and tune without generative AI.
-
-**Usage (Python):**
-
-```python
-from app.query import interpret_query
-
-intent = interpret_query("What is REQ-001?")
-print(intent.intent_type, intent.entities, intent.explanation)
-```
-
-**Run tests:**
-
-```bash
-python -m pytest
-```
-
-## Layout
-
-- `app/` — ingestion, structure, indexing, query, retrieval, evidence, audit, storage
-- `config/` — configuration
-- `data/` — uploads and index artifacts
-- `tests/` — test suite
-- `docs/` — design and architecture
+Active development. See git history for incremental step commits (ingestion through query interpreter).
