@@ -243,6 +243,30 @@ for card in answer.cards:
 python -m pytest
 ```
 
+## Step 10: Local Streamlit UI
+
+A minimal local UI exposes the deterministic backend:
+
+1. **Upload** a PDF, DOCX, or TXT file (saved under `data/uploads/`)
+2. **Process** via `process_document()` into `data/tracedoc.db`
+3. **Select** an indexed document
+4. **Ask a question** and view **evidence cards** (not an AI-generated answer)
+
+No LLM, embeddings, vector search, or external APIs are used.
+
+**Run the app:**
+
+```bash
+pip install -r requirements.txt
+streamlit run app/main.py
+```
+
+**Run tests:**
+
+```bash
+python -m pytest
+```
+
 ## Layout
 
 - `app/` — ingestion, structure, indexing, query, retrieval, evidence, audit, storage
