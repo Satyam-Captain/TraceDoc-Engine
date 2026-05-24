@@ -107,6 +107,14 @@ SCHEMA_STATEMENTS = (
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS document_graphs (
+        document_id INTEGER PRIMARY KEY,
+        graph_json TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY(document_id) REFERENCES documents(id) ON DELETE CASCADE
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS audit_events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         document_id INTEGER,

@@ -584,3 +584,53 @@ def load_document_tree(
     tree = DocumentTree.from_dict(data)
     tree.document_id = document_id
     return tree
+
+
+def save_knowledge_graph(
+    db_path: str | Path,
+    document_id: int,
+    graph: object,
+) -> None:
+    """Persist a document knowledge graph as JSON in SQLite."""
+    from app.graph.models import KnowledgeGraph
+
+    if not isinstance(graph, KnowledgeGraph):
+        raise TypeError("graph must be a KnowledgeGraph instance")
+    initialize_database(db_path)
+    graph.document_id = document_id
+    payload = _json_dumps(graph.to_dict())
+    with connect(db_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO document_graphs (document_id, graph_json)
+            VALUES (?, ?)
+            ON CONFLICT(document_id) DO UPDATE SET
+                graph_json = excluded.graph_json,
+                created_at = datetime('now')
+            """,
+            (document_id, payload),
+        )
+        connection.commit()
+
+
+def load_knowledge_graph(
+    db_path: str | Path,
+    document_id: int,
+):
+    """Load a persisted knowledge graph, or None if missing."""
+    from app.graph.models import KnowledgeGraph
+
+    initialize_database(db_path)
+    with connect(db_path) as connection:
+        row = connection.execute(
+            "SELECT graph_json FROM document_graphs WHERE document_id = ?",
+            (document_id,),
+        ).fetchone()
+    if not row:
+        return None
+    data = _json_loads(row["graph_json"], {})
+    if not data:
+        return None
+    graph = KnowledgeGraph.from_dict(data)
+    graph.document_id = document_id
+    return graph

@@ -13,8 +13,10 @@ from app.storage import (
     initialize_database,
     save_document_bundle,
     save_document_tree,
+    save_knowledge_graph,
     save_index_bundle,
 )
+from app.graph import build_knowledge_graph
 from app.tree import build_document_tree
 from app.schema import discover_document_schema
 from app.storage import save_document_schema
@@ -110,6 +112,10 @@ def process_document(
                 document_id=document_id,
             )
             save_document_tree(db_path, document_id, document_tree)
+            knowledge_graph = build_knowledge_graph(
+                document_id, document_tree, schema
+            )
+            save_knowledge_graph(db_path, document_id, knowledge_graph)
             save_index_bundle(db_path, document_id, index, bm25_stats)
             section_count = len(sections)
             chunk_count = len(chunks)

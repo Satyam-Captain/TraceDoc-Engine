@@ -53,6 +53,7 @@ from app.storage import (
     list_documents,
     load_bm25_statistics,
     load_document_schema,
+    load_knowledge_graph,
     load_index_for_document,
 )
 from app.storage.models import StoredSection
@@ -450,6 +451,15 @@ def ask_document(
             inferred_sections,
             document.file_name,
         )
+        knowledge_graph = load_knowledge_graph(db_path, document_id)
+        if knowledge_graph is not None:
+            debug_trace.append("graph_loaded=True")
+            debug_trace.append(f"graph_node_count={len(knowledge_graph.nodes)}")
+            debug_trace.append(f"graph_edge_count={len(knowledge_graph.edges)}")
+        else:
+            debug_trace.append("graph_loaded=False")
+            debug_trace.append("graph_node_count=0")
+            debug_trace.append("graph_edge_count=0")
         if document_schema is not None:
             category_names = sorted(
                 category.normalized_name for category in document_schema.categories

@@ -55,6 +55,20 @@ document
 
 Section-level Q&A uses `get_section_text()` from this tree as the single extraction source for both structured answers and evidence cards (`extraction_source=DOCUMENT_TREE` in the debug trace). Chunk overlap is only a fallback when a tree section has no body nodes.
 
+### Step 23: Deterministic knowledge graph builder
+
+After the semantic tree and schema are built, TraceDoc constructs a **symbolic knowledge graph** (`document_graphs` in SQLite):
+
+- **Built from** the semantic tree plus schema categories, grammar entities, and rule-based relation patterns (`uses`, `contains`, `includes`, `depends_on`, `refers_to`, `implements`, `is_a`, …).
+- **Not AI** — no LLM, embeddings, or external APIs; only deterministic string rules and evidence-bound endpoints.
+- **Future use** — relationship questions, graph traversal, and question-to-graph matching (not used for answering in this step).
+
+Example triple:
+
+`Enterprise search stack` —**uses**→ `repository connectors`
+
+Debug trace during Q&A includes `graph_loaded`, `graph_node_count`, and `graph_edge_count`.
+
 ## Current capabilities
 
 | Layer | Module | Description |
@@ -62,6 +76,7 @@ Section-level Q&A uses `get_section_text()` from this tree as the single extract
 | Ingestion | `app/ingestion/` | PDF, DOCX, TXT extraction + SHA-256 |
 | Structure | `app/structure/` | Heading detection, line-anchored chunks |
 | Semantic tree | `app/tree/` | Deterministic document → section → paragraph → sentence tree |
+| Knowledge graph | `app/graph/` | Deterministic subject → relation → object graph from tree + schema |
 | Indexing | `app/indexing/` | Tokenization, inverted index, BM25 stats |
 | Retrieval | `app/retrieval/` | Deterministic BM25 ranking |
 | Evidence | `app/evidence/` | Evidence cards, context expansion, structured extractive answers |
