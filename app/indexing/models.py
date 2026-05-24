@@ -22,6 +22,7 @@ class ChunkIndexEntry:
     document_name: str
     chunk_type: str
     section_title: str | None
+    text: str
     token_count: int
     unique_token_count: int
     normalized_text: str

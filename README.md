@@ -84,6 +84,32 @@ print(index.vocabulary_size, bm25_stats["avgdl"])
 python -m pytest
 ```
 
+## Step 5: Deterministic retrieval/search
+
+The Deterministic Retrieval Core accepts a plain-text query, prepares lexical terms (tokenize, normalize, stopword removal with fallback), looks up candidates in the inverted index, and ranks chunks with **BM25**. No AI, embeddings, vector search, or external APIs are involved.
+
+**Query preparation** reuses the indexing tokenizer/normalizer and drops common stopwords unless that would leave an empty query.
+
+**Scoring** applies the standard BM25 formula using precomputed `df`, `idf`, and `avgdl` from Step 4. Each result includes `matched_terms`, per-term scores, and a `why_matched` explanation for auditability.
+
+**Usage (Python):**
+
+```python
+from app.indexing import prepare_document_chunks
+from app.retrieval import search_chunks
+
+index, bm25_stats = prepare_document_chunks(chunks)
+results = search_chunks("HPC6 memory requirements", index, bm25_stats, top_k=5)
+for hit in results:
+    print(hit.score, hit.text, hit.why_matched)
+```
+
+**Run tests:**
+
+```bash
+python -m pytest
+```
+
 ## Layout
 
 - `app/` — ingestion, structure, indexing, query, retrieval, evidence, audit, storage

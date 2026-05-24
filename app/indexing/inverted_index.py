@@ -97,6 +97,7 @@ def build_inverted_index(
             document_name=chunk.document_name,
             chunk_type=chunk.chunk_type,
             section_title=chunk.section_title,
+            text=chunk.text,
             token_count=token_count,
             unique_token_count=len(frequencies),
             normalized_text=_normalize_text(chunk.text),
