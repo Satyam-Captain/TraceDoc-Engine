@@ -28,6 +28,7 @@ from app.query import (
     interpret_query,
 )
 from app.query.models import QueryIntent
+from app.question_graph import build_question_graph, question_graph_debug_lines
 from app.retrieval import (
     collect_section_chunks,
     derive_sections_from_chunks,
@@ -430,6 +431,11 @@ def ask_document(
         retrieval_query = build_retrieval_query(question, query_intent)
         chunks = get_chunks_for_document(db_path, document_id)
         document_schema = load_document_schema(db_path, document_id)
+        question_graph = build_question_graph(
+            question,
+            query_intent=query_intent,
+            schema=document_schema,
+        )
         matched_schema_category = None
         target_category: str | None = None
         debug_trace: list[str] = [
@@ -437,6 +443,7 @@ def ask_document(
             f"retrieval_query={retrieval_query!r}",
             f"chunk_count={len(chunks)}",
         ]
+        debug_trace.extend(question_graph_debug_lines(question_graph))
         total_lines = max((chunk.end_line for chunk in chunks), default=1)
         inferred_sections = _sections_with_inferred_ranges(
             db_path, document_id, chunks, debug_trace=debug_trace

@@ -69,6 +69,18 @@ Example triple:
 
 Debug trace during Q&A includes `graph_loaded`, `graph_node_count`, and `graph_edge_count`.
 
+### Step 24: Question graph builder
+
+Each user question is converted into a small **symbolic query graph** (`app/question_graph/`) before retrieval:
+
+- Example: `What does Enterprise search stack use?` → `Enterprise search stack` —**uses?**→ `?`
+- Example: `What architectures are mentioned?` → `?` —**mentions**→ `architecture`
+- No LLM, embeddings, or external APIs — only deterministic pattern rules and existing token normalization.
+
+Debug trace fields: `question_graph_built`, `qgraph_nodes`, `qgraph_edges`, `qgraph_target_relation`, `qgraph_target_category`.
+
+A future step will **match** the question graph against the document knowledge graph; this step does not change answers yet.
+
 ## Current capabilities
 
 | Layer | Module | Description |
@@ -77,6 +89,7 @@ Debug trace during Q&A includes `graph_loaded`, `graph_node_count`, and `graph_e
 | Structure | `app/structure/` | Heading detection, line-anchored chunks |
 | Semantic tree | `app/tree/` | Deterministic document → section → paragraph → sentence tree |
 | Knowledge graph | `app/graph/` | Deterministic subject → relation → object graph from tree + schema |
+| Question graph | `app/question_graph/` | Symbolic query graph from user questions |
 | Indexing | `app/indexing/` | Tokenization, inverted index, BM25 stats |
 | Retrieval | `app/retrieval/` | Deterministic BM25 ranking |
 | Evidence | `app/evidence/` | Evidence cards, context expansion, structured extractive answers |
