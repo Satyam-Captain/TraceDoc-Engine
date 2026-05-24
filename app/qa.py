@@ -59,6 +59,7 @@ class DocumentQAResult:
     section_retrieval_used: bool = False
     retrieved_section_title: str | None = None
     retrieval_strategy: str = "BM25_CHUNK"
+    debug_trace: list[str] = field(default_factory=list)
 
 
 RETRIEVAL_STRATEGY_SECTION = "SECTION_LEVEL"
@@ -171,14 +172,44 @@ def _top_score(cards: list[EvidenceCard]) -> float | None:
     return max(card.score for card in cards)
 
 
+def _format_candidate_sections(
+    question: str,
+    sections: list[StoredSection],
+    top_k: int = 5,
+) -> str:
+    scored: list[tuple[float, StoredSection]] = []
+    for section in sections:
+        score = score_section_relevance(question, section)
+        if score > 0:
+            scored.append((score, section))
+    scored.sort(
+        key=lambda item: (
+            -item[0],
+            item[1].start_line,
+            item[1].section_id,
+        )
+    )
+    if not scored:
+        return "[]"
+    labels = [f"{section.title}:{score:.2f}" for score, section in scored[:top_k]]
+    return "[" + ", ".join(labels) + "]"
+
+
 def _sections_with_inferred_ranges(
     db_path: str,
     document_id: int,
     chunks: list[DocumentChunk],
+    debug_trace: list[str] | None = None,
 ) -> list[StoredSection]:
     stored_sections = get_sections_for_document(db_path, document_id)
+    if debug_trace is not None:
+        debug_trace.append(f"stored_section_count={len(stored_sections)}")
     if not stored_sections:
+        if debug_trace is not None:
+            debug_trace.append("sections_source=derived_from_chunks")
         return derive_sections_from_chunks(chunks)
+    if debug_trace is not None:
+        debug_trace.append("sections_source=stored_with_inferred_ranges")
 
     document_sections = [
         DocumentSection(
@@ -294,34 +325,82 @@ def ask_document(
 
         retrieval_query = build_retrieval_query(question, query_intent)
         chunks = get_chunks_for_document(db_path, document_id)
+        debug_trace: list[str] = [
+            f"intent_type={query_intent.intent_type}",
+            f"retrieval_query={retrieval_query!r}",
+            f"chunk_count={len(chunks)}",
+        ]
         search_results: list[SearchResult] = []
         section_retrieval_used = False
         retrieved_section_title: str | None = None
         retrieval_strategy = RETRIEVAL_STRATEGY_BM25
         effective_max_cards = max_cards
 
-        if should_use_section_retrieval(question, query_intent.intent_type):
-            sections = _sections_with_inferred_ranges(db_path, document_id, chunks)
-            ranked_sections = find_relevant_sections(question, sections, top_k=3)
-            if ranked_sections:
-                best_section = ranked_sections[0]
-                section_score = score_section_relevance(question, best_section)
-                section_results = _section_results_from_chunks(
-                    best_section,
-                    chunks,
-                    question,
-                    section_score,
+        use_section_retrieval = should_use_section_retrieval(
+            question, query_intent.intent_type
+        )
+        debug_trace.append(f"should_use_section_retrieval={use_section_retrieval}")
+
+        if use_section_retrieval:
+            topic_terms = sorted(extract_topic_terms(question))
+            debug_trace.append(f"topic_terms={topic_terms}")
+            sections = _sections_with_inferred_ranges(
+                db_path, document_id, chunks, debug_trace=debug_trace
+            )
+            debug_trace.append(f"section_count={len(sections)}")
+
+            if not sections:
+                debug_trace.append("fallback_reason=no_sections")
+            else:
+                debug_trace.append(
+                    "candidate_sections="
+                    + _format_candidate_sections(question, sections)
                 )
-                if section_results:
-                    search_results = section_results
-                    section_retrieval_used = True
-                    retrieved_section_title = best_section.title
-                    retrieval_strategy = RETRIEVAL_STRATEGY_SECTION
-                    effective_max_cards = max(
-                        max_cards,
-                        min(len(search_results), 12),
+                ranked_sections = find_relevant_sections(question, sections, top_k=3)
+                if not ranked_sections:
+                    debug_trace.append("fallback_reason=no_relevant_section")
+                else:
+                    best_section = ranked_sections[0]
+                    debug_trace.append(f"selected_section={best_section.title}")
+                    debug_trace.append(
+                        "selected_section_range="
+                        f"{best_section.start_line}-{best_section.end_line}"
                     )
+                    section_score = score_section_relevance(question, best_section)
+                    debug_trace.append(f"selected_section_score={section_score:.2f}")
+                    section_chunks = collect_section_chunks(
+                        best_section, chunks, max_chunks=20
+                    )
+                    debug_trace.append(
+                        f"collected_section_chunks={len(section_chunks)}"
+                    )
+                    if not section_chunks:
+                        debug_trace.append("fallback_reason=no_chunks_in_section")
+                    else:
+                        section_results = _section_results_from_chunks(
+                            best_section,
+                            chunks,
+                            question,
+                            section_score,
+                        )
+                        if section_results:
+                            search_results = section_results
+                            section_retrieval_used = True
+                            retrieved_section_title = best_section.title
+                            retrieval_strategy = RETRIEVAL_STRATEGY_SECTION
+                            effective_max_cards = max(
+                                max_cards,
+                                min(len(search_results), 12),
+                            )
+        else:
+            debug_trace.append("section_retrieval_skipped=trigger_false")
+
         if not search_results:
+            if use_section_retrieval and not any(
+                line.startswith("fallback_reason=") for line in debug_trace
+            ):
+                debug_trace.append("fallback_reason=section_path_empty_results")
+            debug_trace.append("using_bm25_fallback=True")
             index = load_index_for_document(db_path, document_id)
             bm25_stats = load_bm25_statistics(db_path, document_id)
             search_results = search_chunks(
@@ -332,6 +411,11 @@ def ask_document(
                 intent_type=query_intent.intent_type,
                 entities=query_intent.entities,
             )
+            debug_trace.append(f"bm25_result_count={len(search_results)}")
+        else:
+            debug_trace.append("using_bm25_fallback=False")
+
+        debug_trace.append(f"retrieval_strategy={retrieval_strategy}")
         package = _apply_structured_answer(
             compose_answer_package(
                 question,
@@ -355,6 +439,7 @@ def ask_document(
             section_retrieval_used=section_retrieval_used,
             retrieved_section_title=retrieved_section_title,
             retrieval_strategy=retrieval_strategy,
+            debug_trace=debug_trace,
         )
 
         log_audit_event(

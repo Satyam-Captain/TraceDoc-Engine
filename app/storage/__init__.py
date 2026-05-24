@@ -1,5 +1,6 @@
 """Local SQLite persistence."""
 
+from app.storage.cleanup import clear_local_data
 from app.storage.database import connect, initialize_database
 from app.storage.models import AuditEventRecord, DocumentRecord, StoredChunk, StoredSection
 from app.storage.repository import (
@@ -24,6 +25,7 @@ __all__ = [
     "StoredChunk",
     "StoredSection",
     "add_audit_event",
+    "clear_local_data",
     "connect",
     "document_has_index",
     "get_chunks_for_document",

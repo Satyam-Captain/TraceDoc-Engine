@@ -15,10 +15,11 @@ import streamlit as st
 
 from app.pipeline import process_document
 from app.qa import ask_document
-from app.storage import initialize_database, list_audit_events, list_documents
+from app.storage import clear_local_data, initialize_database, list_audit_events, list_documents
 
 DB_PATH = str(PROJECT_ROOT / "data" / "tracedoc.db")
 UPLOAD_DIR = str(PROJECT_ROOT / "data" / "uploads")
+INDEX_DIR = str(PROJECT_ROOT / "data" / "index")
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt"}
 
 
@@ -86,6 +87,45 @@ def _render_sidebar(db_path: str) -> None:
     except Exception:
         document_count = 0
     st.sidebar.metric("Indexed documents", document_count)
+    _render_clear_data_sidebar(db_path)
+
+
+def _render_clear_data_sidebar(db_path: str) -> None:
+    st.sidebar.divider()
+    st.sidebar.subheader("Data management")
+    st.sidebar.caption(
+        "Remove all indexed documents, questions history, audit log, and uploads "
+        "so you can start fresh."
+    )
+
+    confirm = st.sidebar.checkbox(
+        "I want to delete all local TraceDoc data",
+        key="confirm_clear_data",
+    )
+    if st.sidebar.button(
+        "Clear all local data",
+        type="secondary",
+        disabled=not confirm,
+        help="Deletes the database and uploaded files for this app.",
+    ):
+        report = clear_local_data(
+            db_path,
+            upload_dir=UPLOAD_DIR,
+            index_dir=INDEX_DIR,
+        )
+        if report.get("error"):
+            st.sidebar.error(
+                "Could not clear all data. Close other apps using the database "
+                f"and try again.\n\n{report['error']}"
+            )
+            return
+
+        initialize_database(db_path)
+        st.sidebar.success(
+            "Local data cleared. Upload and process documents again."
+        )
+        st.session_state.pop("confirm_clear_data", None)
+        st.rerun()
 
 
 def _render_upload_section(db_path: str) -> None:
@@ -177,6 +217,11 @@ def _render_question_section(db_path: str) -> None:
                 st.markdown(
                     f"**Retrieved section:** {answer.retrieved_section_title}"
                 )
+
+            if answer.debug_trace:
+                with st.expander("Debug trace", expanded=False):
+                    for line in answer.debug_trace:
+                        st.code(line)
 
             if answer.answer_mode == "NO_EVIDENCE":
                 st.warning(answer.no_evidence_message or "No evidence found.")
