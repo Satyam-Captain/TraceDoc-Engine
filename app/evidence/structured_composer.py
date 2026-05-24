@@ -5,7 +5,11 @@ from __future__ import annotations
 import re
 
 from app.evidence.models import EvidenceCard
-from app.evidence.pattern_extractor import extract_enumerated_phrases
+from app.evidence.pattern_extractor import (
+    extract_enumerated_phrases,
+    extract_enumerated_phrases_with_trace,
+)
+from app.evidence.sentence_splitter import split_sentences
 
 _PLURAL_TARGETS = (
     "architectures",
@@ -89,6 +93,14 @@ def _is_valid_list_item(item: str, evidence_lower: str) -> bool:
     return item.lower() in evidence_lower
 
 
+def architecture_evidence_text(cards: list[EvidenceCard]) -> str:
+    """Merge evidence snippets and normalize into sentence-friendly text."""
+    merged = _plain_evidence_text(cards)
+    if not merged.strip():
+        return merged
+    return "\n".join(split_sentences(merged))
+
+
 def _compose_architecture_answer(evidence_text: str) -> str | None:
     found = extract_enumerated_phrases(evidence_text, "architecture")
     if not found:
@@ -97,6 +109,15 @@ def _compose_architecture_answer(evidence_text: str) -> str | None:
     lines = ["The document describes these architecture families:"]
     lines.extend(f"{index}. {label}" for index, label in enumerate(found, start=1))
     return "\n".join(lines)
+
+
+def architecture_extraction_trace(evidence_text: str) -> list[str]:
+    """Debug lines describing extracted architecture phrases."""
+    entries = extract_enumerated_phrases_with_trace(evidence_text, "architecture")
+    return [
+        f"extracted={entry.value} pattern={entry.pattern_name} source={entry.source_sentence[:120]}"
+        for entry in entries
+    ]
 
 
 def _compose_lineage_answer(evidence_text: str) -> str | None:
@@ -203,7 +224,8 @@ def compose_structured_answer(
 
     lower_question = question.lower()
     if "architect" in lower_question:
-        architecture_answer = _compose_architecture_answer(evidence_text)
+        architecture_text = architecture_evidence_text(cards)
+        architecture_answer = _compose_architecture_answer(architecture_text)
         if architecture_answer:
             return architecture_answer
 

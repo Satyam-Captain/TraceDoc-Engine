@@ -10,9 +10,20 @@ from app.evidence.models import (
     ANSWER_MODE_STRUCTURED_EXTRACTIVE,
     EvidenceCard,
 )
+from app.evidence.pattern_extractor import extract_enumerated_phrases
 from app.evidence.structured_composer import (
     compose_structured_answer,
     is_list_enumeration_question,
+)
+
+REAL_PDF_STYLE_SECTION = (
+    "The most common pre-generative architecture is the enterprise search stack: "
+    "repository connectors ingest content, normalize text, and feed search indexes. "
+    "OpenEphyra embodied a modular implementation with question analysis, query generation, "
+    "search, and answer extraction/selection, and the classic QA pipeline is still the "
+    "cleanest conceptual answer for many teaching examples. "
+    "A third architecture is the ontology and knowledge-graph stack. "
+    "A fourth architecture is the traceability and citation graph."
 )
 from app.pipeline import process_document
 from app.qa import ask_document
@@ -194,6 +205,27 @@ def test_non_list_question_stays_evidence_only() -> None:
     answer = compose_structured_answer("where is search mentioned", cards)
 
     assert answer is None
+
+
+def test_real_section_evidence_extracts_all_architecture_families() -> None:
+    phrases = extract_enumerated_phrases(REAL_PDF_STYLE_SECTION, "architecture")
+    assert len(phrases) == 4
+    assert phrases[0] == "Enterprise search stack"
+    assert phrases[1] == "Classic QA pipeline"
+
+
+def test_real_section_structured_composer_lists_all_four() -> None:
+    answer = compose_structured_answer(
+        "what are different architectures mentioned in the pdf?",
+        [
+            _card(REAL_PDF_STYLE_SECTION),
+        ],
+    )
+    assert answer is not None
+    assert "1. Enterprise search stack" in answer
+    assert "2. Classic QA pipeline" in answer
+    assert "3. Ontology and knowledge-graph stack" in answer
+    assert "4. Traceability and citation graph" in answer
 
 
 def test_section_searcher_and_chunk_collection() -> None:

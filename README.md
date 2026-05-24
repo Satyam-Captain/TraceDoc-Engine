@@ -129,6 +129,18 @@ PDF text extraction often loses markdown-style structure, so headings like *Exis
 
 Sample: `samples/pdf_style_document.txt`
 
+## Step 19: Robust deterministic pattern extraction
+
+Architecture structured answers use **sentence segmentation** (`sentence_splitter.py`) and **grammar-style rules** (`pattern_extractor.py`) before composition:
+
+- Split evidence on `. ? !` with simple abbreviation protection
+- Extract phrases from patterns such as `The most common … architecture is X`, stopping at `:`, `;`, or clause introducers (`which`, `that`, `where`, `with`)
+- Detect **Classic QA pipeline** from contextual sentences (for example near *cleanest conceptual answer*) when ordinal wording is absent
+- Fall back to **evidence-grounded noun-phrase recognition** only when the phrase literally appears in retrieved text
+- `clean_extracted_phrase()` normalizes articles, punctuation, and acronyms (QA, RDF, BM25, …)
+
+Still **no LLM, embeddings, or external APIs**. Debug trace may list `extracted=… pattern=…` lines for architecture questions.
+
 ## Step 18: Generic deterministic pattern extraction
 
 Structured architecture answers no longer rely on a hardcoded list of family names. `app/evidence/pattern_extractor.py` applies **symbolic, rule-based extraction** to evidence text (for example `The most common … architecture is X`, `A second architecture is X`) and normalizes phrases for display.

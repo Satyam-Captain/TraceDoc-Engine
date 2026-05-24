@@ -6,6 +6,10 @@ from dataclasses import dataclass, field
 
 from app.audit import log_audit_event
 from app.evidence import compose_answer_package, compose_structured_answer
+from app.evidence.structured_composer import (
+    architecture_evidence_text,
+    architecture_extraction_trace,
+)
 from app.evidence.composer import NO_EVIDENCE_EXPLANATION, NO_EVIDENCE_MESSAGE
 from app.evidence.models import (
     ANSWER_MODE_STRUCTURED_EXTRACTIVE,
@@ -425,6 +429,12 @@ def ask_document(
             ),
             question,
         )
+        if package.structured_answer and "architect" in question.lower():
+            debug_trace.extend(
+                architecture_extraction_trace(
+                    architecture_evidence_text(package.cards)
+                )
+            )
 
         result = DocumentQAResult(
             question=package.question,

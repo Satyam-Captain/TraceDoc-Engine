@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from app.evidence.models import ANSWER_MODE_STRUCTURED_EXTRACTIVE, EvidenceCard
 from app.evidence.pattern_extractor import (
+    clean_extracted_phrase,
     extract_enumerated_phrases,
     extract_enumerated_phrases_with_trace,
 )
-from app.evidence.models import ANSWER_MODE_STRUCTURED_EXTRACTIVE
 from app.evidence.structured_composer import compose_structured_answer
 from app.pipeline import process_document
 from app.qa import RETRIEVAL_STRATEGY_SECTION, ask_document
@@ -21,6 +22,16 @@ ARCHITECTURE_SECTION = (
     "A fourth architecture is the traceability and citation graph.\n"
 )
 
+REAL_SECTION_EVIDENCE = (
+    "The most common pre-generative architecture is the enterprise search stack: "
+    "repository connectors ingest content, normalize text, and feed search indexes. "
+    "OpenEphyra embodied a modular implementation with question analysis, query generation, "
+    "search, and answer extraction/selection, and the classic QA pipeline is still the "
+    "cleanest conceptual answer for many teaching examples. "
+    "A third architecture is the ontology and knowledge-graph stack. "
+    "A fourth architecture is the traceability and citation graph."
+)
+
 QUESTION = "what are different architectures mentioned in the pdf?"
 
 
@@ -31,15 +42,50 @@ def test_most_common_architecture_pattern() -> None:
     assert extract_enumerated_phrases(text, "architecture") == ["Enterprise search stack"]
 
 
+def test_most_common_stops_at_colon() -> None:
+    text = (
+        "The most common pre-generative architecture is the enterprise search stack: "
+        "repository connectors ingest content."
+    )
+    assert extract_enumerated_phrases(text, "architecture") == ["Enterprise search stack"]
+
+
+def test_clean_extracted_phrase_strips_colon_tail() -> None:
+    assert (
+        clean_extracted_phrase("the enterprise search stack: repository connectors")
+        == "Enterprise search stack"
+    )
+
+
 def test_second_architecture_pattern() -> None:
     text = "A second architecture is the classic QA pipeline."
     assert extract_enumerated_phrases(text, "architecture") == ["Classic QA pipeline"]
 
 
-def test_third_architecture_pattern() -> None:
-    text = "A third architecture is the ontology and knowledge-graph stack."
-    assert extract_enumerated_phrases(text, "architecture") == [
-        "Ontology and knowledge-graph stack"
+def test_third_and_fourth_architecture_patterns() -> None:
+    text = (
+        "A third architecture is the ontology and knowledge-graph stack. "
+        "A fourth architecture is the traceability and citation graph."
+    )
+    phrases = extract_enumerated_phrases(text, "architecture")
+    assert phrases == [
+        "Ontology and knowledge-graph stack",
+        "Traceability and citation graph",
+    ]
+
+
+def test_classic_qa_from_context_without_second_architecture_sentence() -> None:
+    phrases = extract_enumerated_phrases(REAL_SECTION_EVIDENCE, "architecture")
+    assert "Classic QA pipeline" in phrases
+
+
+def test_real_section_text_extracts_all_four_families() -> None:
+    phrases = extract_enumerated_phrases(REAL_SECTION_EVIDENCE, "architecture")
+    assert phrases == [
+        "Enterprise search stack",
+        "Classic QA pipeline",
+        "Ontology and knowledge-graph stack",
+        "Traceability and citation graph",
     ]
 
 
@@ -59,13 +105,21 @@ def test_url_and_citation_junk_rejected() -> None:
     assert extract_enumerated_phrases(text, "architecture") == []
 
 
-def test_traceability_includes_source_sentence() -> None:
+def test_no_hallucination_when_phrase_absent() -> None:
+    text = "A third architecture is the ontology and knowledge-graph stack."
+    phrases = extract_enumerated_phrases(text, "architecture")
+    assert "Enterprise search stack" not in phrases
+    assert "Classic QA pipeline" not in phrases
+
+
+def test_traceability_includes_source_sentence_and_pattern() -> None:
     sentence = "A second architecture is the classic QA pipeline."
     entries = extract_enumerated_phrases_with_trace(sentence, "architecture")
 
     assert len(entries) == 1
     assert entries[0].value == "Classic QA pipeline"
     assert entries[0].source_sentence == sentence
+    assert entries[0].pattern_name == "second_architecture"
 
 
 def test_unknown_category_returns_empty() -> None:
@@ -103,23 +157,23 @@ def test_architecture_question_end_to_end(tmp_path: Path) -> None:
     assert "traceability and citation graph" in lowered
 
 
-def test_compose_structured_answer_uses_pattern_extraction() -> None:
-    from app.evidence.models import EvidenceCard
-
-    card = EvidenceCard(
-        chunk_id="c1",
-        document_name="arch.txt",
-        section_title="Existing architectures",
-        start_line=1,
-        end_line=8,
-        snippet=ARCHITECTURE_SECTION,
-        matched_terms=["architecture"],
-        score=2.0,
-        confidence="HIGH",
-        why_matched="test",
-        citation="arch.txt | lines 1-8",
-    )
-    answer = compose_structured_answer(QUESTION, [card])
+def test_compose_structured_answer_real_section_snippets() -> None:
+    cards = [
+        EvidenceCard(
+            chunk_id="c1",
+            document_name="arch.pdf",
+            section_title="Existing architectures",
+            start_line=1,
+            end_line=12,
+            snippet=REAL_SECTION_EVIDENCE,
+            matched_terms=["architecture"],
+            score=3.0,
+            confidence="HIGH",
+            why_matched="section-level retrieval",
+            citation="arch.pdf | section: Existing architectures | lines 1-12",
+        ),
+    ]
+    answer = compose_structured_answer(QUESTION, cards)
 
     assert answer is not None
     assert "1. Enterprise search stack" in answer
