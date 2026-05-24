@@ -100,6 +100,13 @@ SCHEMA_STATEMENTS = (
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS document_trees (
+        document_id INTEGER PRIMARY KEY,
+        tree_json TEXT NOT NULL,
+        FOREIGN KEY(document_id) REFERENCES documents(id) ON DELETE CASCADE
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS audit_events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         document_id INTEGER,

@@ -30,8 +30,11 @@ from app.structure.chunk_section import (
 )
 from app.structure.models import DocumentChunk
 from app.storage.models import StoredSection
+from app.tree.models import DocumentTree, TreeNode
+from app.tree.traversal import find_section_by_title, get_section_sentences, get_section_text
 
-SHORT_EXTRACTION_THRESHOLD = 120
+EXTRACTION_SOURCE_TREE = "DOCUMENT_TREE"
+EXTRACTION_SOURCE_CHUNK = "CHUNK_OVERLAP"
 
 
 @dataclass
@@ -44,6 +47,10 @@ class AnswerContext:
     selected_section: StoredSection | None = None
     selected_section_title: str | None = None
     selected_section_range: tuple[int, int] | None = None
+    selected_section_node: TreeNode | None = None
+    document_tree: DocumentTree | None = None
+    extraction_source: str = EXTRACTION_SOURCE_CHUNK
+    extraction_sentences: list[str] = field(default_factory=list)
     collected_chunks: list[DocumentChunk] = field(default_factory=list)
     primary_section_text: str = ""
     extraction_text: str = ""
@@ -78,27 +85,23 @@ def _heading_like(text: str) -> bool:
 def _needs_section_expansion(text: str, chunks: list[DocumentChunk]) -> bool:
     if not text.strip():
         return True
-    if len(text.strip()) < SHORT_EXTRACTION_THRESHOLD:
+    if len(text.strip()) < 120:
         return True
     if chunks and all(chunk.chunk_type == "section" for chunk in chunks):
         return True
     return _heading_like(text)
 
 
-def build_section_extraction_text(
+def build_section_extraction_text_from_chunks(
     section: StoredSection,
     chunks: list[DocumentChunk],
 ) -> tuple[str, list[DocumentChunk], tuple[int, int], bool]:
-    """
-    Merge in-section chunk text (clipped to section lines).
-
-    When the merge is short or heading-only, include every overlapping chunk
-    clipped to the section range so extraction matches expanded evidence.
-    """
+    """Fallback: merge in-section chunk text when no document tree is available."""
     section_chunks = collect_section_chunks(section, chunks, max_chunks=50)
     if not section_chunks:
         section_chunks = [
-            chunk for chunk in sorted(chunks, key=lambda c: (c.start_line, c.chunk_id))
+            chunk
+            for chunk in sorted(chunks, key=lambda c: (c.start_line, c.chunk_id))
             if chunk_overlaps_section(chunk, section)
         ]
 
@@ -131,6 +134,15 @@ def build_section_extraction_text(
         end_line = section.end_line
 
     return primary, section_chunks, (start_line, end_line), expanded
+
+
+def build_section_extraction_text_from_tree(
+    section_node: TreeNode,
+) -> tuple[str, list[str], tuple[int, int]]:
+    """Primary extraction path using the document semantic tree."""
+    text = get_section_text(section_node)
+    sentences = get_section_sentences(section_node)
+    return text, sentences, (section_node.start_line, section_node.end_line)
 
 
 def _run_category_extraction(
@@ -178,14 +190,45 @@ def build_section_answer_context(
     section_score: float,
     target_category: str | None,
     document_schema: DocumentSchema | None,
+    document_tree: DocumentTree | None = None,
 ) -> AnswerContext:
     """Build a unified context after section selection."""
-    extraction_text, collected_chunks, line_range, expanded = build_section_extraction_text(
-        section, chunks
-    )
+    section_node: TreeNode | None = None
+    extraction_source = EXTRACTION_SOURCE_CHUNK
+    expanded = False
+    collected_chunks: list[DocumentChunk] = []
+
+    tree_section_empty_fallback = False
+    if document_tree is not None:
+        section_node = find_section_by_title(document_tree, section.title)
+        if section_node is not None:
+            extraction_text, extraction_sentences, line_range = (
+                build_section_extraction_text_from_tree(section_node)
+            )
+            if extraction_text.strip():
+                extraction_source = EXTRACTION_SOURCE_TREE
+            else:
+                tree_section_empty_fallback = True
+                extraction_text, collected_chunks, line_range, expanded = (
+                    build_section_extraction_text_from_chunks(section, chunks)
+                )
+                extraction_sentences = []
+        else:
+            extraction_text, collected_chunks, line_range, expanded = (
+                build_section_extraction_text_from_chunks(section, chunks)
+            )
+            extraction_sentences = []
+    else:
+        extraction_text, collected_chunks, line_range, expanded = (
+            build_section_extraction_text_from_chunks(section, chunks)
+        )
+        extraction_sentences = []
+
     preview = extraction_text.replace("\n", " ").strip()[:160]
     if len(extraction_text) > 160:
         preview += "..."
+
+    child_count = len(section_node.children) if section_node is not None else 0
 
     ctx = AnswerContext(
         question=question,
@@ -194,6 +237,10 @@ def build_section_answer_context(
         selected_section=section,
         selected_section_title=section.title,
         selected_section_range=(section.start_line, section.end_line),
+        selected_section_node=section_node,
+        document_tree=document_tree,
+        extraction_source=extraction_source,
+        extraction_sentences=extraction_sentences,
         collected_chunks=collected_chunks,
         primary_section_text=extraction_text,
         extraction_text=extraction_text,
@@ -205,11 +252,33 @@ def build_section_answer_context(
         [
             f"selected_section={section.title}",
             f"selected_section_range={section.start_line}-{section.end_line}",
-            f"collected_section_chunks={len(collected_chunks)}",
-            f"collected_chunk_ranges=[{','.join(f'{c.start_line}-{c.end_line}' for c in collected_chunks)}]",
-            f"context_expansion_applied={expanded}",
+            f"extraction_source={extraction_source}",
+            f"tree_loaded={document_tree is not None}",
+        ]
+    )
+    if section_node is not None:
+        ctx.debug_trace.extend(
+            [
+                f"selected_tree_section={section_node.title}",
+                f"tree_section_line_range={section_node.start_line}-{section_node.end_line}",
+                f"tree_section_child_count={child_count}",
+            ]
+        )
+        if tree_section_empty_fallback:
+            ctx.debug_trace.append("tree_section_empty_fallback=True")
+    if extraction_source == EXTRACTION_SOURCE_CHUNK:
+        ctx.debug_trace.extend(
+            [
+                f"collected_section_chunks={len(collected_chunks)}",
+                f"collected_chunk_ranges=[{','.join(f'{c.start_line}-{c.end_line}' for c in collected_chunks)}]",
+                f"context_expansion_applied={expanded}",
+            ]
+        )
+    ctx.debug_trace.extend(
+        [
             f"extraction_text_line_range={line_range[0]}-{line_range[1]}",
             f"extraction_text_preview={preview!r}",
+            f"extraction_sentence_count={len(extraction_sentences)}",
         ]
     )
 
@@ -241,12 +310,12 @@ def build_section_answer_context(
 
     query_terms = sorted(extract_topic_terms(question))
     matched_terms = [
-        term
-        for term in query_terms
-        if term in extraction_text.lower()
+        term for term in query_terms if term in extraction_text.lower()
     ]
     expansion_note = ""
-    if expanded:
+    if extraction_source == EXTRACTION_SOURCE_TREE:
+        expansion_note = " Extraction text sourced from document semantic tree."
+    elif expanded:
         expansion_note = (
             " Context expanded from all chunks overlapping the selected section range."
         )
@@ -254,22 +323,28 @@ def build_section_answer_context(
         f"Matched by section-level retrieval from section '{section.title}'."
         f"{expansion_note}"
     )
-    ctx.search_results = [
-        SearchResult(
-            chunk_id=collected_chunks[0].chunk_id if collected_chunks else section.section_id,
-            document_name=document_name,
-            text=extraction_text,
-            score=section_score + 0.5,
-            matched_terms=matched_terms,
-            term_scores={term: 1.0 for term in matched_terms},
-            start_line=line_range[0],
-            end_line=line_range[1],
-            section_title=section.title,
-            section_id=section.section_id,
-            chunk_type="section_bundle",
-            why_matched=why_matched,
-        )
-    ]
+    anchor_id = (
+        collected_chunks[0].chunk_id
+        if collected_chunks
+        else (section_node.node_id if section_node else section.section_id)
+    )
+    if extraction_text.strip():
+        ctx.search_results = [
+            SearchResult(
+                chunk_id=anchor_id,
+                document_name=document_name,
+                text=extraction_text,
+                score=section_score + 0.5,
+                matched_terms=matched_terms,
+                term_scores={term: 1.0 for term in matched_terms},
+                start_line=line_range[0],
+                end_line=line_range[1],
+                section_title=section.title,
+                section_id=section.section_id,
+                chunk_type="section_bundle",
+                why_matched=why_matched,
+            )
+        ]
     return ctx
 
 
@@ -363,3 +438,41 @@ def context_debug_trace(ctx: AnswerContext) -> list[str]:
             f"structured_extraction_failed_reason={ctx.structured_extraction_failed_reason}"
         )
     return lines
+
+
+def resolve_document_tree(
+    db_path: str,
+    document_id: int,
+    chunks: list[DocumentChunk],
+    sections: list[StoredSection],
+    document_name: str,
+) -> DocumentTree | None:
+    """Load a persisted tree or build one on demand for QA."""
+    from app.storage import load_document_tree
+    from app.structure.models import DocumentSection
+    from app.tree import build_document_tree
+
+    tree = load_document_tree(db_path, document_id)
+    if tree is not None:
+        return tree
+
+    if not sections:
+        return None
+
+    document_sections = [
+        DocumentSection(
+            section_id=section.section_id,
+            title=section.title,
+            level=section.level,
+            start_line=section.start_line,
+            end_line=section.end_line,
+            parent_section_id=section.parent_section_id,
+        )
+        for section in sections
+    ]
+    return build_document_tree(
+        document_sections,
+        chunks,
+        document_name=document_name,
+        document_id=document_id,
+    )

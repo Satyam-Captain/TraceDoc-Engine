@@ -12,8 +12,10 @@ from app.storage import (
     get_document_processing_counts,
     initialize_database,
     save_document_bundle,
+    save_document_tree,
     save_index_bundle,
 )
+from app.tree import build_document_tree
 from app.schema import discover_document_schema
 from app.storage import save_document_schema
 from app.structure import structure_document
@@ -101,6 +103,13 @@ def process_document(
         if created:
             schema = discover_document_schema(document_id, sections, chunks)
             save_document_schema(db_path, schema)
+            document_tree = build_document_tree(
+                sections,
+                chunks,
+                document_name=file_name,
+                document_id=document_id,
+            )
+            save_document_tree(db_path, document_id, document_tree)
             save_index_bundle(db_path, document_id, index, bm25_stats)
             section_count = len(sections)
             chunk_count = len(chunks)

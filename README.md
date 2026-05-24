@@ -30,14 +30,30 @@ TraceDoc ingests PDF, DOCX, and TXT files, builds a lexical index, and returns *
 ## Architecture summary
 
 ```
-Upload → Ingestion → Structure/Chunking → Lexical Index → SQLite
+Upload → Ingestion → Structure/Chunking → Semantic Tree → Lexical Index → SQLite
                                               ↓
-Question → Query Interpreter → BM25 Retrieval → Evidence Cards
+Question → Query Interpreter → Section Tree Retrieval → Evidence Cards
                                               ↓
                                     Audit log (append-only)
 ```
 
 Full logical architecture: [`docs/architecture.md`](docs/architecture.md) and [`docs/architecture.drawio`](docs/architecture.drawio).
+
+### Document semantic tree
+
+During processing, TraceDoc builds a deterministic tree stored in SQLite (`document_trees`):
+
+```
+document
+├── section: Existing architectures
+│   ├── paragraph
+│   │   └── sentence: The most common pre-generative architecture is ...
+│   └── ...
+└── section: Design patterns for implementation
+    └── ...
+```
+
+Section-level Q&A uses `get_section_text()` from this tree as the single extraction source for both structured answers and evidence cards (`extraction_source=DOCUMENT_TREE` in the debug trace). Chunk overlap is only a fallback when a tree section has no body nodes.
 
 ## Current capabilities
 
@@ -45,12 +61,13 @@ Full logical architecture: [`docs/architecture.md`](docs/architecture.md) and [`
 |-------|--------|-------------|
 | Ingestion | `app/ingestion/` | PDF, DOCX, TXT extraction + SHA-256 |
 | Structure | `app/structure/` | Heading detection, line-anchored chunks |
+| Semantic tree | `app/tree/` | Deterministic document → section → paragraph → sentence tree |
 | Indexing | `app/indexing/` | Tokenization, inverted index, BM25 stats |
 | Retrieval | `app/retrieval/` | Deterministic BM25 ranking |
 | Evidence | `app/evidence/` | Evidence cards, context expansion, structured extractive answers |
 | Storage | `app/storage/` | SQLite persistence |
 | Pipeline | `app/pipeline.py` | `process_document()` end-to-end |
-| Q&A | `app/qa.py` | `ask_document()` orchestration |
+| Q&A | `app/qa.py`, `app/qa_context.py` | `ask_document()` orchestration; tree-backed section extraction |
 | Query | `app/query/` | Rule-based intent detection |
 | Audit | `app/audit/` | Append-only event logging |
 | UI | `app/main.py` | Streamlit demo |

@@ -134,7 +134,8 @@ def test_debug_trace_for_architecture_question(tmp_path: Path) -> None:
     trace_text = "\n".join(answer.debug_trace)
     assert "should_use_section_retrieval=True" in trace_text
     assert "selected_section=Existing architectures" in trace_text
-    assert "collected_section_chunks=" in trace_text
+    assert "extraction_source=DOCUMENT_TREE" in trace_text
+    assert "tree_loaded=True" in trace_text
     assert "using_bm25_fallback=False" in trace_text
     assert not any(line.startswith("fallback_reason=") for line in answer.debug_trace)
     assert answer.retrieval_strategy == RETRIEVAL_STRATEGY_SECTION

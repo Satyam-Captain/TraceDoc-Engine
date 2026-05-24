@@ -16,6 +16,7 @@ from app.storage.models import (
 )
 from app.schema.models import DocumentSchema, document_schema_from_dict, document_schema_to_dict
 from app.structure.models import DocumentChunk, DocumentSection
+from app.tree.models import DocumentTree
 
 
 def _json_dumps(value: Any) -> str:
@@ -541,3 +542,45 @@ def load_document_schema(
             discovered_sections=loaded.discovered_sections,
         )
     return loaded
+
+
+def save_document_tree(
+    db_path: str | Path,
+    document_id: int,
+    tree: DocumentTree,
+) -> None:
+    """Persist a document semantic tree as JSON in SQLite."""
+    initialize_database(db_path)
+    tree.document_id = document_id
+    payload = _json_dumps(tree.to_dict())
+    with connect(db_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO document_trees (document_id, tree_json)
+            VALUES (?, ?)
+            ON CONFLICT(document_id) DO UPDATE SET tree_json = excluded.tree_json
+            """,
+            (document_id, payload),
+        )
+        connection.commit()
+
+
+def load_document_tree(
+    db_path: str | Path,
+    document_id: int,
+) -> DocumentTree | None:
+    """Load a persisted document tree, or None if missing."""
+    initialize_database(db_path)
+    with connect(db_path) as connection:
+        row = connection.execute(
+            "SELECT tree_json FROM document_trees WHERE document_id = ?",
+            (document_id,),
+        ).fetchone()
+    if not row:
+        return None
+    data = _json_loads(row["tree_json"], {})
+    if not data:
+        return None
+    tree = DocumentTree.from_dict(data)
+    tree.document_id = document_id
+    return tree

@@ -14,6 +14,7 @@ from app.qa_context import (
     build_section_answer_context,
     context_debug_trace,
     finalize_answer_context,
+    resolve_document_tree,
 )
 from app.evidence.composer import NO_EVIDENCE_EXPLANATION, NO_EVIDENCE_MESSAGE
 from app.evidence.models import (
@@ -442,6 +443,13 @@ def ask_document(
         chunks = _align_chunks_to_inferred_sections(
             chunks, inferred_sections, total_lines=total_lines
         )
+        document_tree = resolve_document_tree(
+            db_path,
+            document_id,
+            chunks,
+            inferred_sections,
+            document.file_name,
+        )
         if document_schema is not None:
             category_names = sorted(
                 category.normalized_name for category in document_schema.categories
@@ -550,6 +558,7 @@ def ask_document(
                             section_score=section_score,
                             target_category=target_category,
                             document_schema=document_schema,
+                            document_tree=document_tree,
                         )
                         section_package = finalize_answer_context(
                             section_answer_context,
@@ -559,12 +568,20 @@ def ask_document(
                         debug_trace.extend(
                             context_debug_trace(section_answer_context)
                         )
-                        if section_answer_context.search_results:
+                        if (
+                            section_answer_context.search_results
+                            and section_package.answer_mode != "NO_EVIDENCE"
+                        ):
                             search_results = section_answer_context.search_results
                             section_retrieval_used = True
                             retrieved_section_title = best_section.title
                             retrieval_strategy = RETRIEVAL_STRATEGY_SECTION
                             effective_max_cards = max(max_cards, 3)
+                        elif section_package.answer_mode == "NO_EVIDENCE":
+                            section_package = None
+                            debug_trace.append(
+                                "fallback_reason=empty_tree_section_text"
+                            )
         else:
             debug_trace.append("section_retrieval_skipped=trigger_false")
 
