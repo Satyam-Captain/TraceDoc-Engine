@@ -1,2 +1,3 @@
-# TraceDoc Engine dependencies
-# Add packages as implementation steps require them.
+pypdf
+python-docx
+pytest
