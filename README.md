@@ -119,6 +119,16 @@ Suggested flow—details in [`docs/demo_walkthrough.md`](docs/demo_walkthrough.m
 | [`samples/system_architectures.txt`](samples/system_architectures.txt) | Architecture families for structured list answers |
 | [`samples/lineage_capabilities.txt`](samples/lineage_capabilities.txt) | Lineage / SPDM concepts for explanation-style questions |
 
+## Step 16: PDF semantic heading detection
+
+PDF text extraction often loses markdown-style structure, so headings like *Existing architectures* may appear as plain lines. TraceDoc now applies **deterministic layout heuristics** (line length, title casing, blank-line context, known prefixes, paragraph-follow signals) to promote semantic section boundaries before chunking and indexing.
+
+- **No ML/OCR** — rule-based scoring only
+- **Improves section retrieval** — list questions can match section titles such as *Existing architectures*
+- **Limitations** — unusual fonts, multi-column PDFs, or heading-like sentences in body text may still be missed or over-detected; thresholds aim for meaningful sections only
+
+Sample: `samples/pdf_style_document.txt`
+
 ## Step 15: Section-level retrieval
 
 Chunk-only BM25 can return only the first matching chunk near a heading. For broader questions (for example *different architectures*, *what architectures are mentioned*, *explain lineage*), TraceDoc now:

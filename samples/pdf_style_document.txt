@@ -1,0 +1,60 @@
+What this kind of system really is
+
+A deterministic document question-answering system retrieves evidence from uploaded files.
+It does not generate prose answers with an LLM.
+Users ask questions and receive citation-backed evidence cards.
+
+Existing architectures
+
+The most common pre-generative architecture is the enterprise search stack.
+A second architecture is the classic QA pipeline.
+A third architecture is the ontology and knowledge-graph stack.
+A fourth architecture is the traceability and citation graph.
+
+Architecture comparison
+
+Teams often compare enterprise search stacks with classic QA pipelines when planning evidence systems.
+
+Open-source building blocks
+
+For ingestion, the most useful open-source building blocks include PDF parsers and text extractors.
+Indexing uses inverted lexical indexes with BM25 ranking.
+Storage uses SQLite for local persistence.
+
+Common capabilities
+
+Lineage is one of the most important concepts in traceability workflows.
+Lineage means history and traceability of something across a workflow.
+Examples include which geometry was used and which dataset was used.
+
+Ways to make systems feel intelligent without AI
+
+Structured extractive answers can list architecture families from section text.
+Section-level retrieval improves list-style questions.
+Deterministic query interpretation routes questions to the right retrieval path.
+
+Requirements for evidence quality
+
+Every answer must cite source line ranges.
+Evidence cards must show matched terms and confidence levels.
+No invented content is allowed outside retrieved snippets.
+
+Limitations
+
+PDF extraction quality depends on source formatting.
+Heading detection may miss unusual layouts.
+Lexical retrieval does not understand synonyms without explicit rules.
+
+Evaluation checklist
+
+Reviewers should verify section retrieval, structured answers, and citation coverage.
+
+Future improvements
+
+Better table extraction would help requirement documents.
+Multi-document comparison remains limited in the first version.
+Enterprise connectors are documented as future scope.
+
+Conclusion
+
+TraceDoc Engine prioritizes traceability and deterministic behavior over generative fluency.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from app.structure.heading_heuristics import is_probable_heading
 from app.structure.hierarchy import build_section_hierarchy, infer_section_ranges
 from app.structure.models import DocumentSection
 
@@ -40,7 +41,12 @@ def _is_uppercase_heading(line: str) -> bool:
     return letter_count >= 3
 
 
-def _match_heading(line: str) -> tuple[str, int] | None:
+def _match_heading(
+    line: str,
+    *,
+    previous_line: str | None = None,
+    next_line: str | None = None,
+) -> tuple[str, int] | None:
     """Return (title, level) if the line is a heading, else None."""
     stripped = line.strip()
     if not stripped:
@@ -82,6 +88,9 @@ def _match_heading(line: str) -> tuple[str, int] | None:
     if _is_uppercase_heading(stripped):
         return stripped, 1
 
+    if is_probable_heading(line, previous_line, next_line):
+        return stripped, 1
+
     return None
 
 
@@ -90,7 +99,8 @@ def detect_sections(text: str) -> list[DocumentSection]:
     Detect document sections using deterministic, explainable heading rules.
 
     Supported patterns include markdown headings, numbered headings,
-    uppercase titles, appendix/section labels, and numbered titles.
+    uppercase titles, appendix/section labels, numbered titles, and
+    PDF-friendly layout heuristics for short title-like lines.
     """
     if not text:
         return []
@@ -99,7 +109,13 @@ def detect_sections(text: str) -> list[DocumentSection]:
     sections: list[DocumentSection] = []
 
     for line_number, line in enumerate(lines, start=1):
-        match = _match_heading(line)
+        previous_line = lines[line_number - 2] if line_number > 1 else None
+        next_line = lines[line_number] if line_number < len(lines) else None
+        match = _match_heading(
+            line,
+            previous_line=previous_line,
+            next_line=next_line,
+        )
         if match is None:
             continue
         title, level = match
