@@ -2,7 +2,7 @@
 
 **Deterministic evidence-based document QA engine** for local laptops.
 
-TraceDoc ingests PDF, DOCX, and TXT files, builds a lexical index, and returns **citation-first evidence cards** for each question. Every result traces to source text with line anchors—no generated prose answer.
+TraceDoc ingests PDF, DOCX, and TXT files, builds a lexical index, and returns **citation-first evidence cards** for each question. For list-like questions it can also show a **structured extractive answer** built only from retrieved snippets—still no LLM or invented content.
 
 ## What it is
 
@@ -47,7 +47,7 @@ Full logical architecture: [`docs/architecture.md`](docs/architecture.md) and [`
 | Structure | `app/structure/` | Heading detection, line-anchored chunks |
 | Indexing | `app/indexing/` | Tokenization, inverted index, BM25 stats |
 | Retrieval | `app/retrieval/` | Deterministic BM25 ranking |
-| Evidence | `app/evidence/` | Evidence cards with citations |
+| Evidence | `app/evidence/` | Evidence cards, context expansion, structured extractive answers |
 | Storage | `app/storage/` | SQLite persistence |
 | Pipeline | `app/pipeline.py` | `process_document()` end-to-end |
 | Q&A | `app/qa.py` | `ask_document()` orchestration |
@@ -90,7 +90,7 @@ streamlit run app/main.py
 1. Upload a document (or use files from `samples/`)
 2. Process into the local database
 3. Select a document and ask a question
-4. Review **evidence cards** (not an AI answer) and the audit log
+4. Review **extractive answers** (when applicable), **supporting evidence cards**, and the audit log
 
 ## Demo script (architect briefing)
 
@@ -116,6 +116,19 @@ Suggested flow—details in [`docs/demo_walkthrough.md`](docs/demo_walkthrough.m
 |------|---------|
 | [`samples/hpc6_policy.txt`](samples/hpc6_policy.txt) | HPC6 memory, CPU binding, NVMe, GPFS, table rows |
 | [`samples/requirements_sample.txt`](samples/requirements_sample.txt) | REQ-001..003, shall/must language |
+| [`samples/system_architectures.txt`](samples/system_architectures.txt) | Architecture families for structured list answers |
+| [`samples/lineage_capabilities.txt`](samples/lineage_capabilities.txt) | Lineage / SPDM concepts for explanation-style questions |
+
+## Step 14: Structured extractive answers
+
+For list-style questions (for example *different architectures?*, *what are the types of …*, *list …*), TraceDoc can compose a short **structured extractive answer** from retrieved evidence only.
+
+- **Not LLM generation** — no model invents text; items must appear in evidence snippets.
+- **Deterministic rules** — architecture phrases, numbered/bullet lines, and ordinal sentences (`The first … is …`) are matched with regex.
+- **Useful for enumerations** — readable bullet summaries above supporting evidence cards.
+- **Limitations** — if extraction is uncertain, the UI falls back to `EVIDENCE_ONLY` with cards only; lexical retrieval gaps still apply.
+
+Try: process `samples/system_architectures.txt`, then ask *different architectures?*
 
 ## Python API (minimal)
 
@@ -137,6 +150,7 @@ for card in answer.cards:
 
 - Single-machine, single-user focus in v1
 - Lexical matching only (no synonym expansion or embeddings)
+- Structured answers only for list-like questions with extractable enumeration in evidence
 - No generative summarization or multi-hop reasoning
 - PDF/DOCX extraction quality depends on source formatting
 - Multi-document Q&A is limited to simple orchestration helpers

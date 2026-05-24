@@ -5,9 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from app.audit import log_audit_event
-from app.evidence import compose_answer_package
+from app.evidence import compose_answer_package, compose_structured_answer
 from app.evidence.composer import NO_EVIDENCE_EXPLANATION, NO_EVIDENCE_MESSAGE
-from app.evidence.models import EvidenceCard
+from app.evidence.models import (
+    ANSWER_MODE_STRUCTURED_EXTRACTIVE,
+    AnswerPackage,
+    EvidenceCard,
+)
 from app.query import (
     build_retrieval_query,
     compose_intent_explanation,
@@ -36,6 +40,7 @@ class DocumentQAResult:
     document_name: str
     answer_mode: str
     cards: list[EvidenceCard] = field(default_factory=list)
+    structured_answer: str | None = None
     no_evidence_message: str | None = None
     explanation: str = ""
     query_intent: QueryIntent | None = None
@@ -48,9 +53,35 @@ class AllDocumentsQAResult:
     question: str
     answer_mode: str
     cards: list[EvidenceCard] = field(default_factory=list)
+    structured_answer: str | None = None
     no_evidence_message: str | None = None
     explanation: str = ""
     document_count: int = 0
+
+
+STRUCTURED_ANSWER_EXPLANATION_SUFFIX = (
+    " A structured extractive summary was composed only from retrieved evidence text."
+)
+
+
+def _apply_structured_answer(package: AnswerPackage, question: str) -> AnswerPackage:
+    """Upgrade answer package to STRUCTURED_EXTRACTIVE when rules match evidence."""
+    if package.answer_mode == "NO_EVIDENCE" or not package.cards:
+        return package
+
+    structured = compose_structured_answer(question, package.cards)
+    if not structured:
+        return package
+
+    explanation = package.explanation + STRUCTURED_ANSWER_EXPLANATION_SUFFIX
+    return AnswerPackage(
+        question=package.question,
+        answer_mode=ANSWER_MODE_STRUCTURED_EXTRACTIVE,
+        cards=package.cards,
+        structured_answer=structured,
+        no_evidence_message=package.no_evidence_message,
+        explanation=explanation,
+    )
 
 
 def _no_evidence_result(
@@ -174,11 +205,14 @@ def ask_document(
             entities=query_intent.entities,
         )
         chunks = get_chunks_for_document(db_path, document_id)
-        package = compose_answer_package(
+        package = _apply_structured_answer(
+            compose_answer_package(
+                question,
+                search_results,
+                max_cards=max_cards,
+                all_chunks=chunks,
+            ),
             question,
-            search_results,
-            max_cards=max_cards,
-            all_chunks=chunks,
         )
 
         result = DocumentQAResult(
@@ -187,6 +221,7 @@ def ask_document(
             document_name=document.file_name,
             answer_mode=package.answer_mode,
             cards=package.cards,
+            structured_answer=package.structured_answer,
             no_evidence_message=package.no_evidence_message,
             explanation=compose_intent_explanation(query_intent, package.explanation),
             query_intent=query_intent,
@@ -288,17 +323,21 @@ def ask_all_documents(
         for document in documents
         for chunk in chunks_by_document.get(document.id, [])
     ]
-    package = compose_answer_package(
+    package = _apply_structured_answer(
+        compose_answer_package(
+            question,
+            sorted_results,
+            max_cards=max_cards,
+            all_chunks=all_chunks or None,
+        ),
         question,
-        sorted_results,
-        max_cards=max_cards,
-        all_chunks=all_chunks or None,
     )
 
     return AllDocumentsQAResult(
         question=package.question,
         answer_mode=package.answer_mode,
         cards=package.cards,
+        structured_answer=package.structured_answer,
         no_evidence_message=package.no_evidence_message,
         explanation=compose_intent_explanation(query_intent, package.explanation),
         document_count=indexed_count,

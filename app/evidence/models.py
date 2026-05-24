@@ -2,6 +2,10 @@
 
 from dataclasses import dataclass, field
 
+ANSWER_MODE_EVIDENCE_ONLY = "EVIDENCE_ONLY"
+ANSWER_MODE_STRUCTURED_EXTRACTIVE = "STRUCTURED_EXTRACTIVE"
+ANSWER_MODE_NO_EVIDENCE = "NO_EVIDENCE"
+
 
 @dataclass
 class EvidenceCard:
@@ -27,5 +31,6 @@ class AnswerPackage:
     question: str
     answer_mode: str
     cards: list[EvidenceCard] = field(default_factory=list)
+    structured_answer: str | None = None
     no_evidence_message: str | None = None
     explanation: str = ""

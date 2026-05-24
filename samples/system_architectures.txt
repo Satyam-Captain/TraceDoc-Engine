@@ -1,0 +1,11 @@
+SYSTEM ARCHITECTURES
+
+This document compares architecture families used in evidence-based QA systems.
+
+The enterprise search stack provides keyword retrieval over indexed chunks.
+
+The classic QA pipeline combines retrieval, evidence cards, and deterministic answers.
+
+The ontology and knowledge-graph stack links entities and relationships from documents.
+
+The traceability and citation graph records line-anchored evidence for audit review.

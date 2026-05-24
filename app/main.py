@@ -177,7 +177,16 @@ def _render_question_section(db_path: str) -> None:
                 st.caption(answer.explanation)
                 return
 
-            st.success("Evidence cards")
+            if answer.structured_answer:
+                st.markdown("### Extractive answer")
+                st.info(
+                    "Composed deterministically from retrieved document text — "
+                    "not an AI-generated answer."
+                )
+                st.markdown(answer.structured_answer)
+                st.divider()
+                st.markdown("### Supporting evidence")
+
             st.caption(answer.explanation)
 
             for index, card in enumerate(answer.cards, start=1):
