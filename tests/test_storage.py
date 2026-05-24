@@ -158,16 +158,16 @@ def test_bm25_stats_saved_and_loaded(tmp_path: Path) -> None:
 
 
 def test_audit_event_created(tmp_path: Path) -> None:
+    from app.pipeline import process_document
+
+    source = tmp_path / "audit-policy.txt"
     db_path = tmp_path / "tracedoc.db"
-    extraction = _sample_extraction()
-    sections, chunks = structure_document(extraction.file_name, extraction.text)
-    document_id, _ = save_document_bundle(db_path, extraction, sections, chunks)
+    source.write_text("Audit policy text for logging.", encoding="utf-8")
 
-    events = list_audit_events(db_path, document_id=document_id)
+    result = process_document(str(source), db_path=str(db_path))
+    events = list_audit_events(db_path, document_id=result.document_id)
 
-    assert len(events) == 1
-    assert events[0].event_type == "document_saved"
-    assert events[0].details["chunk_count"] == len(chunks)
+    assert any(event.event_type == "document_processed" for event in events)
 
 
 def test_loaded_index_can_be_searched(tmp_path: Path) -> None:

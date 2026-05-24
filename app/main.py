@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -9,7 +10,7 @@ import streamlit as st
 
 from app.pipeline import process_document
 from app.qa import ask_document
-from app.storage import initialize_database, list_documents
+from app.storage import initialize_database, list_audit_events, list_documents
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = str(PROJECT_ROOT / "data" / "tracedoc.db")
@@ -186,6 +187,33 @@ def _render_question_section(db_path: str) -> None:
             st.error(f"Search failed: {error}")
 
 
+def _render_audit_section(db_path: str) -> None:
+    st.header("Audit / Traceability")
+    st.caption("Append-only local audit log for document processing and questions.")
+
+    try:
+        events = list_audit_events(db_path, limit=100)
+    except Exception as error:
+        st.error(f"Unable to load audit events: {error}")
+        return
+
+    if not events:
+        st.info("No audit events recorded yet.")
+        return
+
+    for event in reversed(events):
+        with st.expander(
+            f"{event.created_at or 'unknown time'} — {event.event_type}",
+            expanded=False,
+        ):
+            st.markdown(f"**Event type:** {event.event_type}")
+            st.markdown(f"**Timestamp:** {event.created_at}")
+            if event.document_id is not None:
+                st.markdown(f"**Document ID:** {event.document_id}")
+            st.markdown("**Details:**")
+            st.code(json.dumps(event.details, indent=2, sort_keys=True), language="json")
+
+
 def main() -> None:
     """Render the TraceDoc Engine Streamlit application."""
     st.set_page_config(
@@ -199,6 +227,8 @@ def main() -> None:
     _render_upload_section(DB_PATH)
     st.divider()
     _render_question_section(DB_PATH)
+    st.divider()
+    _render_audit_section(DB_PATH)
 
 
 if __name__ == "__main__":

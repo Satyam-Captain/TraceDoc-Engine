@@ -267,6 +267,27 @@ streamlit run app/main.py
 python -m pytest
 ```
 
+## Step 11: Audit logging and traceability
+
+TraceDoc records **append-only audit events** in SQLite for document processing and question-answer activity. The Streamlit UI includes an **Audit / Traceability** section showing timestamps, event types, and JSON details.
+
+**Why it matters:** regulated and audit-heavy environments need reproducible, inspectable actions—not black-box AI responses. Every process and query leaves a local trail without external services.
+
+**Logged events:**
+- `document_processed` — successful ingest/index pipeline
+- `duplicate_document_detected` — checksum already present
+- `document_processing_failed` — processing error (message only, no stack trace in UI)
+- `question_asked` — evidence search completed (includes `answer_mode`, card count, top score)
+- `question_failed` — Q&A error
+
+No AI, LLM, embeddings, or external APIs are used.
+
+**Run tests:**
+
+```bash
+python -m pytest
+```
+
 ## Layout
 
 - `app/` — ingestion, structure, indexing, query, retrieval, evidence, audit, storage

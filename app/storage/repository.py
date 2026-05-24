@@ -219,25 +219,6 @@ def save_document_bundle(
                 ),
             )
 
-        connection.execute(
-            """
-            INSERT INTO audit_events (document_id, event_type, message, details_json)
-            VALUES (?, ?, ?, ?)
-            """,
-            (
-                document_id,
-                "document_saved",
-                f"Document saved: {extraction.file_name}",
-                _json_dumps(
-                    {
-                        "checksum_sha256": extraction.checksum_sha256,
-                        "file_name": extraction.file_name,
-                        "section_count": len(sections),
-                        "chunk_count": len(chunks),
-                    }
-                ),
-            ),
-        )
         connection.commit()
 
     return document_id, True
@@ -417,6 +398,39 @@ def load_index_for_document(db_path: str | Path, document_id: int) -> InvertedIn
         searchable_term_map=dict(bm25_stats.get("searchable_term_map", {})),
         field_weights=dict(bm25_stats.get("field_weights", {})),
     )
+
+
+def add_audit_event(
+    db_path: str | Path,
+    event_type: str,
+    details: dict,
+    document_id: int | None = None,
+    message: str | None = None,
+) -> None:
+    """Insert one audit event into the audit_events table."""
+    initialize_database(db_path)
+    event_message = message or event_type.replace("_", " ")
+
+    stored_details = dict(details)
+    foreign_key_document_id = document_id
+    if document_id is not None and get_document_by_id(db_path, document_id) is None:
+        foreign_key_document_id = None
+        stored_details.setdefault("document_id", document_id)
+
+    with connect(db_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO audit_events (document_id, event_type, message, details_json)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                foreign_key_document_id,
+                event_type,
+                event_message,
+                _json_dumps(stored_details),
+            ),
+        )
+        connection.commit()
 
 
 def list_audit_events(
