@@ -129,6 +129,17 @@ PDF text extraction often loses markdown-style structure, so headings like *Exis
 
 Sample: `samples/pdf_style_document.txt`
 
+## Step 21.4: Semantic boundary enforcement
+
+Extraction is validated against discovered **category boundaries** so grammars do not leak entities from other sections (for example architecture families into a design-pattern answer). `app/evidence/extraction_validator.py` provides `validate_extracted_entity()` and contamination filtering using:
+
+- Category type phrases in the source sentence
+- Section scope (entity must come from the category’s discovered section)
+- Cross-category entity indexes built from section-scoped grammar runs
+- Deterministic rejection of conflicting ordinal lines (e.g. `architecture is` inside a `design_pattern` query)
+
+Grammar execution in `extraction_runtime.py` only scans ordinal enumeration sentences, trims entities at clause boundaries, and records rejected entities for debug trace (`entity_validation_enabled`, `rejected_entities`, `rejection_reason=category_boundary_violation`).
+
 ## Step 21.3: Grammar execution runtime
 
 Discovered grammars are now **executable** via `app/evidence/extraction_runtime.py`. The runtime compiles ordinal sentence templates (with optional modifiers such as *critical*, *important*, *common*) into deterministic regexes, extracts `<ENTITY>` values in document order, deduplicates, and reports `extraction_confidence`.

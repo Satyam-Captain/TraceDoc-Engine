@@ -106,6 +106,58 @@ def architecture_evidence_text(cards: list[EvidenceCard]) -> str:
     return "\n".join(split_sentences(merged))
 
 
+def _cards_for_category_section(
+    cards: list[EvidenceCard],
+    source_section: str,
+) -> list[EvidenceCard]:
+    """Keep only evidence cards whose section title matches the category section."""
+    section_lower = source_section.strip().lower()
+    if not section_lower:
+        return cards
+    scoped = [
+        card
+        for card in cards
+        if section_lower in (card.section_title or "").lower()
+    ]
+    return scoped
+
+
+def _scoped_category_evidence_text(
+    cards: list[EvidenceCard],
+    category: str,
+    document_schema: DocumentSchema,
+) -> str:
+    """Evidence text bounded to the discovered section for one category."""
+    from app.evidence.extraction_validator import filter_text_to_category_sentences
+    from app.schema.registry import build_category_registry
+
+    entry = build_category_registry(document_schema).get(category, {})
+    source_section = str(entry.get("section", ""))
+    scoped_cards = _cards_for_category_section(cards, source_section)
+    merged = architecture_evidence_text(scoped_cards if scoped_cards else cards)
+    return filter_text_to_category_sentences(merged, category, document_schema)
+
+
+def _validation_registry_for_schema(
+    document_schema: DocumentSchema,
+    cards: list[EvidenceCard],
+):
+    """Build a validation registry with per-category section-scoped entity indexes."""
+    from app.evidence.extraction_validator import build_extraction_validation_registry
+    from app.schema.registry import build_category_registry
+
+    category_registry = build_category_registry(document_schema)
+    scoped_text: dict[str, str] = {}
+    for category, entry in category_registry.items():
+        section = str(entry.get("section", ""))
+        scoped_cards = _cards_for_category_section(cards, section)
+        scoped_text[category] = architecture_evidence_text(scoped_cards)
+    return build_extraction_validation_registry(
+        document_schema,
+        full_text_by_category=scoped_text,
+    )
+
+
 def _category_display_label(category: str) -> str:
     """Human-readable label for a normalized schema category key."""
     return category.replace("_", " ")
@@ -124,15 +176,29 @@ def _compose_entity_list_answer(intro: str, entities: list[str]) -> str:
     return "\n".join(lines)
 
 
-def _append_supporting_evidence(answer: str, cards: list[EvidenceCard]) -> str:
+def _append_supporting_evidence(
+    answer: str,
+    cards: list[EvidenceCard],
+    *,
+    category: str = "",
+    document_schema: DocumentSchema | None = None,
+) -> str:
     if not cards:
         return answer
     lines = [answer, "", "Supporting evidence:"]
     for index, card in enumerate(cards[:4], start=1):
         preview = card.snippet.replace("[[", "").replace("]]", "")
+        if category and document_schema is not None:
+            from app.evidence.extraction_validator import filter_text_to_category_sentences
+
+            preview = filter_text_to_category_sentences(
+                preview, category, document_schema
+            )
         preview = re.sub(r"\s+", " ", preview).strip()
         if len(preview) > 160:
             preview = preview[:157] + "..."
+        if not preview:
+            continue
         lines.append(f"- ({index}) {card.citation}: {preview}")
     return "\n".join(lines)
 
@@ -143,14 +209,23 @@ def compose_grammar_driven_answer(
     grammar: DiscoveredPattern,
     *,
     cards: list[EvidenceCard] | None = None,
+    document_schema: DocumentSchema | None = None,
     include_supporting_evidence: bool = True,
+    validation_registry: object | None = None,
+    section_title: str = "",
 ) -> tuple[str | None, GrammarExecutionResult | None]:
     """
     Build a numbered list answer by executing a discovered grammar on evidence text.
 
     Returns (answer_text, execution_result).
     """
-    result = execute_discovered_grammar_with_result(evidence_text, grammar)
+    result = execute_discovered_grammar_with_result(
+        evidence_text,
+        grammar,
+        category=category,
+        validation_registry=validation_registry,
+        section_title=section_title,
+    )
     if not result.success or not result.entities:
         return None, result
 
@@ -161,7 +236,17 @@ def compose_grammar_driven_answer(
     intro = _grammar_list_intro(category, count=len(result.entities))
     answer = _compose_entity_list_answer(intro, result.entities)
     if include_supporting_evidence and cards:
-        answer = _append_supporting_evidence(answer, cards)
+        display_cards = cards
+        if section_title:
+            scoped = _cards_for_category_section(cards, section_title)
+            if scoped:
+                display_cards = scoped
+        answer = _append_supporting_evidence(
+            answer,
+            display_cards,
+            category=category,
+            document_schema=document_schema,
+        )
     return answer, result
 
 
@@ -189,16 +274,27 @@ def _compose_schema_category_answer(
     *,
     cards: list[EvidenceCard] | None = None,
 ) -> tuple[str | None, GrammarExecutionResult | None]:
-    from app.schema.registry import primary_grammar_for_category
+    from app.schema.registry import build_category_registry, primary_grammar_for_category
 
     grammar = primary_grammar_for_category(document_schema, category)
+    validation_registry = None
+    section_title = ""
+    if cards:
+        validation_registry = _validation_registry_for_schema(document_schema, cards)
+        section_title = str(
+            build_category_registry(document_schema).get(category, {}).get("section", "")
+        )
+
     if grammar is not None:
         answer, result = compose_grammar_driven_answer(
             evidence_text,
             category,
             grammar,
             cards=cards,
+            document_schema=document_schema,
             include_supporting_evidence=True,
+            validation_registry=validation_registry,
+            section_title=section_title,
         )
         if answer:
             return answer, result
@@ -211,11 +307,16 @@ def _compose_schema_category_answer(
     if len(found) < 2:
         return None, None
 
-    label = _category_display_label(category)
-    intro = f"The document describes these {label} items:"
+    intro = _grammar_list_intro(category, count=len(found))
     answer = _compose_entity_list_answer(intro, found)
     if cards:
-        answer = _append_supporting_evidence(answer, cards)
+        display_cards = _cards_for_category_section(cards, section_title) if section_title else cards
+        answer = _append_supporting_evidence(
+            answer,
+            display_cards or cards,
+            category=category,
+            document_schema=document_schema,
+        )
     return answer, None
 
 
@@ -244,12 +345,27 @@ def grammar_execution_debug_lines(
     if result is None:
         return ["grammar_execution_success=False", "extracted_entities_count=0"]
     entities_preview = ", ".join(result.entities[:8])
-    return [
+    lines = [
         f"grammar_execution_success={str(result.success)}",
         f"extracted_entities_count={result.match_count}",
         f"extracted_entities=[{entities_preview}]",
         f"extraction_confidence={result.extraction_confidence:.2f}",
     ]
+    from app.evidence.extraction_validator import (
+        FilteredExtractionResult,
+        validation_debug_lines,
+    )
+
+    lines.extend(
+        validation_debug_lines(
+            FilteredExtractionResult(
+                validated_entities=result.validated_entities or result.entities,
+                rejected_entities=result.rejected_entities,
+                rejection_reasons=result.rejection_reasons,
+            )
+        )
+    )
+    return lines
 
 
 def _compose_lineage_answer(evidence_text: str) -> str | None:
@@ -356,7 +472,7 @@ def compose_structured_answer(
         return None
 
     lower_question = question.lower()
-
+    matched_category = None
     if document_schema is not None:
         from app.schema.discovery import match_question_to_schema_category
 
@@ -367,17 +483,25 @@ def compose_structured_answer(
             matched_category is not None
             and matched_category.normalized_name != "architecture"
         ):
-            schema_text = architecture_evidence_text(cards)
+            schema_text = _scoped_category_evidence_text(
+                cards,
+                matched_category.normalized_name,
+                document_schema,
+            )
+            if not schema_text.strip():
+                return None
             schema_answer, _ = _compose_schema_category_answer(
                 schema_text,
                 matched_category.normalized_name,
                 document_schema,
                 cards=cards,
             )
-            if schema_answer:
-                return schema_answer
+            return schema_answer
 
-    if "architect" in lower_question:
+    if "architect" in lower_question and (
+        matched_category is None
+        or matched_category.normalized_name == "architecture"
+    ):
         architecture_text = architecture_evidence_text(cards)
         architecture_answer = _compose_architecture_answer(
             architecture_text,

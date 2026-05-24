@@ -299,6 +299,10 @@ def _extract_architecture_phrases(text: str) -> list[ExtractedPhrase]:
 def extract_using_discovered_grammar(
     text: str,
     discovered_pattern: object,
+    *,
+    document_schema: object | None = None,
+    validation_registry: object | None = None,
+    section_title: str = "",
 ) -> list[ExtractedPhrase]:
     """Extract entity phrases using one discovered grammar definition."""
     from app.evidence.extraction_runtime import execute_discovered_grammar_with_result
@@ -307,7 +311,24 @@ def extract_using_discovered_grammar(
     if not isinstance(discovered_pattern, DiscoveredPattern):
         return []
 
-    result = execute_discovered_grammar_with_result(text, discovered_pattern)
+    category = discovered_pattern.category
+    if validation_registry is None and document_schema is not None:
+        from app.schema.models import DocumentSchema
+        from app.evidence.extraction_validator import build_extraction_validation_registry
+
+        if isinstance(document_schema, DocumentSchema):
+            validation_registry = build_extraction_validation_registry(
+                document_schema,
+                full_text_by_category={category: text},
+            )
+
+    result = execute_discovered_grammar_with_result(
+        text,
+        discovered_pattern,
+        category=category,
+        validation_registry=validation_registry,
+        section_title=section_title,
+    )
     if not result.entities:
         return []
 
@@ -345,9 +366,20 @@ def _extract_from_document_schema(
     if not isinstance(document_schema, DocumentSchema):
         return []
 
+    from app.evidence.extraction_validator import build_extraction_validation_registry
+
+    validation_registry = build_extraction_validation_registry(
+        document_schema,
+        full_text_by_category={category: text},
+    )
+
     candidates: list[tuple[int, ExtractedPhrase]] = []
     for pattern in registry_patterns_for_category(document_schema, category):
-        for entry in extract_using_discovered_grammar(text, pattern):
+        for entry in extract_using_discovered_grammar(
+            text,
+            pattern,
+            validation_registry=validation_registry,
+        ):
             position = text.find(entry.source_sentence)
             candidates.append((position if position >= 0 else len(candidates), entry))
 

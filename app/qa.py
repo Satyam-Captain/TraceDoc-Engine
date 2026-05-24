@@ -422,8 +422,22 @@ def ask_document(
                     grammar_text = "\n".join(
                         chunk.text for chunk in (section_chunks or chunks)
                     )
+                    from app.evidence.extraction_validator import (
+                        build_extraction_validation_registry,
+                    )
+
+                    validation_registry = build_extraction_validation_registry(
+                        document_schema,
+                        full_text_by_category={
+                            matched_schema_category.normalized_name: grammar_text
+                        },
+                    )
                     grammar_result = execute_discovered_grammar_with_result(
-                        grammar_text, grammar
+                        grammar_text,
+                        grammar,
+                        category=matched_schema_category.normalized_name,
+                        validation_registry=validation_registry,
+                        section_title=matched_schema_category.source_section,
                     )
                     debug_trace.extend(grammar_execution_debug_lines(grammar_result))
         search_results: list[SearchResult] = []

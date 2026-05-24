@@ -1,0 +1,16 @@
+Existing architectures
+
+The most common architecture is the enterprise search stack.
+
+Design patterns for implementation
+
+The first critical design pattern is section-aware ingestion.
+The second design pattern is multi-granular indexing.
+
+Open-source building blocks
+
+For ingestion, useful open-source building blocks include parsers.
+
+Common capabilities
+
+Lineage is one of the most important concepts.

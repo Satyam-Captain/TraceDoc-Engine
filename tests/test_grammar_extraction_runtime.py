@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from app.evidence.extraction_runtime import execute_discovered_grammar_with_result
+from app.evidence.extraction_runtime import (
+    execute_discovered_grammar_with_result,
+    trim_entity_span,
+)
 from app.schema.discovery import discover_document_schema
 from app.schema.models import DiscoveredPattern
 from app.schema.registry import primary_grammar_for_category
@@ -90,6 +93,25 @@ def test_deduplication() -> None:
     result = execute_discovered_grammar_with_result(text, modified)
 
     assert result.entities == ["Shared cache", "Edge routing"]
+
+
+def test_regex_extracts_only_intended_entity_span() -> None:
+    grammar = _ordinal_grammar()
+    sentence = (
+        "The first critical design pattern is section-aware ingestion; "
+        "this enables traceability."
+    )
+    result = execute_discovered_grammar_with_result(sentence, grammar)
+    assert result.entities == ["Section-aware ingestion"]
+
+
+def test_clause_boundary_trimming_works() -> None:
+    assert trim_entity_span("section-aware ingestion; this enables traceability") == (
+        "section-aware ingestion"
+    )
+    assert trim_entity_span("multi-granular indexing: a key capability") == (
+        "multi-granular indexing"
+    )
 
 
 def test_no_hallucination_on_unrelated_text() -> None:

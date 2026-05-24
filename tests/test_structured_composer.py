@@ -25,6 +25,20 @@ DESIGN_PATTERN_TEXT = (
     "The third pattern is deterministic query interpretation.\n"
 )
 
+BOUNDARY_PDF_DOCUMENT = (
+    "Existing architectures\n\n"
+    "The most common architecture is the enterprise search stack.\n"
+    "A second architecture is the classic QA pipeline.\n"
+    "A third architecture is the ontology and knowledge-graph stack.\n"
+    "A fourth architecture is the traceability and citation graph.\n\n"
+    "Design patterns for implementation\n\n"
+    "The first critical design pattern is section-aware ingestion.\n"
+    "The second pattern is multi-granular indexing.\n"
+    "The third pattern is deterministic query interpretation.\n"
+    "The fourth pattern is citation-first answer composition.\n"
+    "The fifth pattern is symbolic enrichment.\n"
+)
+
 REAL_PDF_STYLE_SECTION = (
     "The most common pre-generative architecture is the enterprise search stack: "
     "repository connectors ingest content, normalize text, and feed search indexes. "
@@ -242,11 +256,22 @@ def test_design_patterns_structured_answer_uses_grammar_execution() -> None:
     sections, chunks = structure_document("design.txt", DESIGN_PATTERN_TEXT)
     schema = discover_document_schema(1, sections, chunks)
     cards = [
-        _card(
-            "The first critical design pattern is section-aware ingestion.\n"
-            "The second pattern is multi-granular indexing.\n"
-            "The third pattern is deterministic query interpretation.",
+        EvidenceCard(
             chunk_id="c-design",
+            document_name="design.txt",
+            section_title="Design patterns for implementation",
+            start_line=1,
+            end_line=5,
+            snippet=(
+                "The first critical design pattern is section-aware ingestion.\n"
+                "The second pattern is multi-granular indexing.\n"
+                "The third pattern is deterministic query interpretation."
+            ),
+            matched_terms=["design"],
+            score=2.0,
+            confidence="HIGH",
+            why_matched="test",
+            citation="design.txt | lines 1-5",
         ),
     ]
     answer = compose_structured_answer(
@@ -263,13 +288,63 @@ def test_design_patterns_structured_answer_uses_grammar_execution() -> None:
     assert "Supporting evidence:" in answer
 
 
+def test_design_pattern_answer_excludes_architecture_entities() -> None:
+    sections, chunks = structure_document("boundary.txt", BOUNDARY_PDF_DOCUMENT)
+    schema = discover_document_schema(1, sections, chunks)
+    mixed_snippet = (
+        "The most common architecture is the enterprise search stack.\n"
+        "A second architecture is the classic QA pipeline.\n"
+        "A third architecture is the ontology and knowledge-graph stack.\n"
+        "A fourth architecture is the traceability and citation graph.\n"
+        "The first critical design pattern is section-aware ingestion.\n"
+        "The second pattern is multi-granular indexing.\n"
+        "The third pattern is deterministic query interpretation.\n"
+        "The fourth pattern is citation-first answer composition.\n"
+        "The fifth pattern is symbolic enrichment.\n"
+    )
+    cards = [
+        _card(
+            mixed_snippet,
+            chunk_id="mixed",
+        ),
+    ]
+    cards[0] = EvidenceCard(
+        chunk_id="mixed",
+        document_name="boundary.txt",
+        section_title="Design patterns for implementation",
+        start_line=10,
+        end_line=20,
+        snippet=mixed_snippet,
+        matched_terms=["design", "pattern"],
+        score=2.0,
+        confidence="HIGH",
+        why_matched="test",
+        citation="boundary.txt | section: Design patterns for implementation | lines 10-20",
+    )
+    answer = compose_structured_answer(
+        "what are different design pattern mentioned in the pdf?",
+        cards,
+        document_schema=schema,
+    )
+
+    assert answer is not None
+    lowered = answer.lower()
+    assert "section-aware ingestion" in lowered
+    assert "citation-first answer composition" in lowered
+    assert "symbolic enrichment" in lowered
+    answer_body = answer.split("Supporting evidence:")[0].lower()
+    assert "classic qa pipeline" not in answer_body
+    assert "ontology and knowledge-graph stack" not in lowered
+    assert "traceability and citation graph" not in lowered
+
+
 def test_design_patterns_question_debug_trace_has_grammar_execution(tmp_path: Path) -> None:
     source = tmp_path / "design_runtime.txt"
     db_path = tmp_path / "tracedoc.db"
-    source.write_text(DESIGN_PATTERN_TEXT, encoding="utf-8")
+    source.write_text(BOUNDARY_PDF_DOCUMENT, encoding="utf-8")
     processed = process_document(str(source), db_path=str(db_path))
     answer = ask_document(
-        "what design patterns are mentioned?",
+        "what are different design pattern mentioned in the pdf?",
         processed.document_id,
         db_path=str(db_path),
     )
@@ -277,7 +352,29 @@ def test_design_patterns_question_debug_trace_has_grammar_execution(tmp_path: Pa
     trace = "\n".join(answer.debug_trace)
     assert answer.structured_answer is not None
     assert "grammar_execution_success=True" in trace
+    assert "entity_validation_enabled=True" in trace
     assert "1. Section-aware ingestion" in answer.structured_answer
+    answer_body = answer.structured_answer.split("Supporting evidence:")[0].lower()
+    assert "classic qa pipeline" not in answer_body
+
+
+def test_boundary_pdf_e2e_rejects_architecture_in_trace(tmp_path: Path) -> None:
+    source = tmp_path / "boundary_pdf.txt"
+    db_path = tmp_path / "tracedoc.db"
+    source.write_text(BOUNDARY_PDF_DOCUMENT, encoding="utf-8")
+    processed = process_document(str(source), db_path=str(db_path))
+    answer = ask_document(
+        "what are different design pattern mentioned in the pdf?",
+        processed.document_id,
+        db_path=str(db_path),
+    )
+
+    trace = "\n".join(answer.debug_trace)
+    assert answer.structured_answer is not None
+    assert "entity_validation_enabled=True" in trace
+    body = answer.structured_answer.split("Supporting evidence:")[0].lower()
+    assert "classic qa pipeline" not in body
+    assert "section-aware ingestion" in body
 
 
 def test_section_searcher_and_chunk_collection() -> None:

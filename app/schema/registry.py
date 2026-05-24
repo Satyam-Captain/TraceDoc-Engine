@@ -132,3 +132,4 @@ def primary_grammar_for_category(
     if not patterns:
         return None
     return max(patterns, key=lambda item: item.confidence_score)
+
