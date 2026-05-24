@@ -16,8 +16,10 @@ from app.query import (
 from app.query.models import QueryIntent
 from app.retrieval import search_chunks
 from app.retrieval.models import SearchResult
+from app.structure.models import DocumentChunk
 from app.storage import (
     document_has_index,
+    get_chunks_for_document,
     get_document_by_id,
     list_documents,
     load_bm25_statistics,
@@ -164,10 +166,19 @@ def ask_document(
         bm25_stats = load_bm25_statistics(db_path, document_id)
         retrieval_query = build_retrieval_query(question, query_intent)
         search_results = search_chunks(
-            retrieval_query, index, bm25_stats, top_k=top_k
+            retrieval_query,
+            index,
+            bm25_stats,
+            top_k=top_k,
+            intent_type=query_intent.intent_type,
+            entities=query_intent.entities,
         )
+        chunks = get_chunks_for_document(db_path, document_id)
         package = compose_answer_package(
-            question, search_results, max_cards=max_cards
+            question,
+            search_results,
+            max_cards=max_cards,
+            all_chunks=chunks,
         )
 
         result = DocumentQAResult(
@@ -240,8 +251,11 @@ def ask_all_documents(
             document_count=len(documents),
         )
 
+    query_intent = interpret_query(question)
+    retrieval_query = build_retrieval_query(question, query_intent)
     combined_results: list[SearchResult] = []
     indexed_count = 0
+    chunks_by_document: dict[int, list[DocumentChunk]] = {}
 
     for document in documents:
         if not document_has_index(db_path, document.id):
@@ -252,24 +266,33 @@ def ask_all_documents(
 
         indexed_count += 1
         index = load_index_for_document(db_path, document.id)
-        combined_results.extend(
-            search_chunks(
-                question,
-                index,
-                statistics,
-                top_k=top_k_per_document,
-            )
+        doc_results = search_chunks(
+            retrieval_query,
+            index,
+            statistics,
+            top_k=top_k_per_document,
+            intent_type=query_intent.intent_type,
+            entities=query_intent.entities,
         )
+        chunks_by_document[document.id] = get_chunks_for_document(db_path, document.id)
+        combined_results.extend(doc_results)
 
     if indexed_count == 0:
         raise ValueError(
             "No indexed documents found. Process documents before asking questions."
         )
 
+    sorted_results = _sort_search_results(combined_results)
+    all_chunks = [
+        chunk
+        for document in documents
+        for chunk in chunks_by_document.get(document.id, [])
+    ]
     package = compose_answer_package(
         question,
-        _sort_search_results(combined_results),
+        sorted_results,
         max_cards=max_cards,
+        all_chunks=all_chunks or None,
     )
 
     return AllDocumentsQAResult(
@@ -277,6 +300,6 @@ def ask_all_documents(
         answer_mode=package.answer_mode,
         cards=package.cards,
         no_evidence_message=package.no_evidence_message,
-        explanation=package.explanation,
+        explanation=compose_intent_explanation(query_intent, package.explanation),
         document_count=indexed_count,
     )

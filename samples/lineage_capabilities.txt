@@ -1,0 +1,9 @@
+COMMON CAPABILITIES
+
+SPDM Lineage on Runs
+
+Lineage is one of the most important concepts in SPDM workflows for traceability.
+
+Lineage = history and traceability of something across a workflow or simulation lifecycle.
+
+Examples include which geometry was used, which dataset was used, which solver version was applied to produce a result.

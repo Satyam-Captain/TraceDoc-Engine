@@ -6,6 +6,7 @@ from app.indexing.normalizer import normalize_token
 from app.indexing.tokenizer import tokenize
 from app.query.models import (
     INTENT_DEFINITION_LOOKUP,
+    INTENT_EXPLANATION_LOOKUP,
     INTENT_GENERAL_SEARCH,
     INTENT_REQUIREMENT_REFERENCE,
     QueryIntent,
@@ -50,6 +51,10 @@ def build_retrieval_query(question: str, intent: QueryIntent) -> str:
     """Apply light deterministic query shaping before lexical retrieval."""
     if intent.intent_type == INTENT_DEFINITION_LOOKUP:
         return f"{question} definition means refers to"
+    if intent.intent_type == INTENT_EXPLANATION_LOOKUP:
+        return (
+            f"{question} meaning means definition explanation concept"
+        )
     if intent.intent_type == INTENT_REQUIREMENT_REFERENCE:
         requirement_ids = intent.filters.get("requirement_ids", [])
         if requirement_ids:

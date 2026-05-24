@@ -8,6 +8,7 @@ from app.indexing.stopwords import is_stopword
 from app.indexing.tokenizer import tokenize
 from app.retrieval.models import SearchQuery, SearchResult
 from app.retrieval.scorer import score_chunk_bm25
+from app.retrieval.section_boost import apply_section_aware_boost
 
 
 def prepare_search_query(query: str) -> SearchQuery:
@@ -55,6 +56,9 @@ def search_chunks(
     index: InvertedIndex,
     bm25_stats: dict,
     top_k: int = 5,
+    *,
+    intent_type: str | None = None,
+    entities: list[str] | None = None,
 ) -> list[SearchResult]:
     """
     Search indexed chunks with deterministic BM25 ranking.
@@ -90,6 +94,13 @@ def search_chunks(
             k1=k1,
             b=b,
         )
+        score = apply_section_aware_boost(
+            score,
+            chunk_entry,
+            prepared.normalized_terms,
+            intent_type=intent_type,
+            entities=entities,
+        )
         if score <= 0:
             continue
 
@@ -110,6 +121,7 @@ def search_chunks(
                 section_title=chunk_entry.section_title,
                 chunk_type=chunk_entry.chunk_type,
                 why_matched=_build_why_matched(matched_terms),
+                section_id=metadata.get("section_id"),
             )
         )
 

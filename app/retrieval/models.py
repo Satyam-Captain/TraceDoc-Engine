@@ -27,3 +27,4 @@ class SearchResult:
     section_title: str | None
     chunk_type: str
     why_matched: str
+    section_id: str | None = None

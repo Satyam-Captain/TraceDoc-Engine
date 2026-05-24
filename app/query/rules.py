@@ -7,6 +7,7 @@ import re
 from app.query.models import (
     INTENT_COMPARISON,
     INTENT_DEFINITION_LOOKUP,
+    INTENT_EXPLANATION_LOOKUP,
     INTENT_GENERAL_SEARCH,
     INTENT_LIST_REQUEST,
     INTENT_REQUIREMENT_REFERENCE,
@@ -16,6 +17,12 @@ from app.query.models import (
 
 _REQUIREMENT_ID = re.compile(r"\b[A-Za-z]{2,}-\d+\b", re.IGNORECASE)
 _QUOTED_ENTITY = re.compile(r'"([^"]+)"|\'([^\']+)\'')
+
+_EXPLANATION_PATTERNS = (
+    re.compile(r"^\s*explain\s+(.+?)\??\s*$", re.IGNORECASE),
+    re.compile(r"^\s*what\s+does\s+(.+?)\s+mean\??\s*$", re.IGNORECASE),
+    re.compile(r"^\s*describe\s+(.+?)\??\s*$", re.IGNORECASE),
+)
 
 _DEFINITION_PATTERNS = (
     re.compile(r"^\s*what\s+is\s+(.+?)\??\s*$", re.IGNORECASE),
@@ -69,6 +76,13 @@ def extract_entities(question: str) -> list[str]:
         value = match.group(1) or match.group(2)
         if value:
             entities.append(value.strip())
+
+    for pattern in _EXPLANATION_PATTERNS:
+        match = pattern.match(question)
+        if match:
+            subject = match.group(1).strip(" ?.")
+            if subject:
+                entities.append(subject)
 
     for pattern in _DEFINITION_PATTERNS:
         match = pattern.match(question)
@@ -150,6 +164,14 @@ def classify_intent(question: str, entities: list[str]) -> tuple[str, str, dict]
             "List request intent detected from list/show-all phrasing.",
             {},
         )
+
+    for pattern in _EXPLANATION_PATTERNS:
+        if pattern.match(stripped):
+            return (
+                INTENT_EXPLANATION_LOOKUP,
+                "Explanation lookup intent detected from explain/describe/what-does-mean phrasing.",
+                {},
+            )
 
     for pattern in _DEFINITION_PATTERNS:
         if pattern.match(stripped):
