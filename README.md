@@ -119,6 +119,18 @@ Suggested flow—details in [`docs/demo_walkthrough.md`](docs/demo_walkthrough.m
 | [`samples/system_architectures.txt`](samples/system_architectures.txt) | Architecture families for structured list answers |
 | [`samples/lineage_capabilities.txt`](samples/lineage_capabilities.txt) | Lineage / SPDM concepts for explanation-style questions |
 
+## Step 15: Section-level retrieval
+
+Chunk-only BM25 can return only the first matching chunk near a heading. For broader questions (for example *different architectures*, *what architectures are mentioned*, *explain lineage*), TraceDoc now:
+
+1. Ranks document **sections** by title overlap (with weak-word filtering and singular/plural normalization)
+2. Collects **all chunks inside the best section** (up to a deterministic cap)
+3. Passes section-level evidence to structured extractive composition
+
+- **No AI/LLM** — section scoring and extraction use tokenizer, normalizer, and regex rules only
+- **BM25 fallback preserved** — if no relevant section/chunks are found, chunk BM25 search still runs
+- **Limitations** — depends on heading detection quality; unstructured PDFs may still miss section boundaries
+
 ## Step 14: Structured extractive answers
 
 For list-style questions (for example *different architectures?*, *what are the types of …*, *list …*), TraceDoc can compose a short **structured extractive answer** from retrieved evidence only.
@@ -150,7 +162,8 @@ for card in answer.cards:
 
 - Single-machine, single-user focus in v1
 - Lexical matching only (no synonym expansion or embeddings)
-- Structured answers only for list-like questions with extractable enumeration in evidence
+- Structured answers only when extractable phrases exist in retrieved section/chunk evidence
+- Section-level retrieval requires detectable headings and section ranges
 - No generative summarization or multi-hop reasoning
 - PDF/DOCX extraction quality depends on source formatting
 - Multi-document Q&A is limited to simple orchestration helpers

@@ -184,8 +184,13 @@ def _render_question_section(db_path: str) -> None:
                     "not an AI-generated answer."
                 )
                 st.markdown(answer.structured_answer)
+                if answer.section_retrieval_used and answer.retrieved_section_title:
+                    st.caption(
+                        "Section-level retrieval used for section: "
+                        f"**{answer.retrieved_section_title}**"
+                    )
                 st.divider()
-                st.markdown("### Supporting evidence from retrieved section")
+                st.markdown("### Supporting evidence")
 
             st.caption(answer.explanation)
 

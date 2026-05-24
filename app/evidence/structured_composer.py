@@ -26,6 +26,15 @@ _ARCHITECTURE_PHRASES: tuple[tuple[str, str], ...] = (
     ("traceability and citation graph", "Traceability and citation graph"),
 )
 
+_LINEAGE_PHRASES: tuple[tuple[str, str], ...] = (
+    ("history and traceability", "History and traceability"),
+    ("provenance", "Provenance"),
+    ("which geometry", "Which geometry was used"),
+    ("which dataset", "Which dataset was used"),
+    ("solver version", "Solver version"),
+    ("runtime environment", "Runtime environment"),
+)
+
 _NUMBERED_LINE = re.compile(r"^\s*\d+[\.\)]\s+(.+)$")
 _BULLET_LINE = re.compile(r"^\s*[-*•]\s+(.+)$")
 _THE_ORDINAL_LINE = re.compile(
@@ -51,13 +60,26 @@ def is_list_enumeration_question(question: str) -> bool:
     lower = stripped.lower()
     if "different" in lower:
         return True
-    if "types of" in lower:
+    if "types" in lower or "kinds" in lower:
         return True
     if lower.startswith("what are"):
         return True
     if lower.startswith("list"):
         return True
+    if "mentioned" in lower:
+        return True
     return any(term in lower for term in _PLURAL_TARGETS)
+
+
+def _is_lineage_question(question: str) -> bool:
+    lower = question.lower()
+    return "lineage" in lower and any(
+        token in lower for token in ("explain", "meaning", "define", "describe", "what")
+    )
+
+
+def _should_attempt_structured_answer(question: str) -> bool:
+    return is_list_enumeration_question(question) or _is_lineage_question(question)
 
 
 def _normalize_list_item(item: str) -> str:
@@ -83,13 +105,22 @@ def _compose_architecture_answer(evidence_text: str) -> str | None:
     if not found:
         return None
 
-    count_word = {
-        1: "one",
-        2: "two",
-        3: "three",
-        4: "four",
-    }.get(len(found), str(len(found)))
-    lines = [f"The document describes {count_word} architecture families:"]
+    lines = ["The document describes these architecture families:"]
+    lines.extend(f"{index}. {label}" for index, label in enumerate(found, start=1))
+    return "\n".join(lines)
+
+
+def _compose_lineage_answer(evidence_text: str) -> str | None:
+    evidence_lower = evidence_text.lower()
+    found: list[str] = []
+    for phrase, label in _LINEAGE_PHRASES:
+        if phrase in evidence_lower:
+            found.append(label)
+
+    if not found:
+        return None
+
+    lines = ["The document describes lineage using these extracted points:"]
     lines.extend(f"{index}. {label}" for index, label in enumerate(found, start=1))
     return "\n".join(lines)
 
@@ -174,7 +205,7 @@ def compose_structured_answer(
     """
     if not cards:
         return None
-    if not is_list_enumeration_question(question):
+    if not _should_attempt_structured_answer(question):
         return None
 
     evidence_text = _plain_evidence_text(cards)
@@ -186,6 +217,14 @@ def compose_structured_answer(
         architecture_answer = _compose_architecture_answer(evidence_text)
         if architecture_answer:
             return architecture_answer
+
+    if _is_lineage_question(question):
+        lineage_answer = _compose_lineage_answer(evidence_text)
+        if lineage_answer:
+            return lineage_answer
+
+    if not is_list_enumeration_question(question):
+        return None
 
     items = _extract_generic_enumeration(evidence_text)
     if len(items) >= 2:

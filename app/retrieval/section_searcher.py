@@ -1,15 +1,42 @@
-"""Deterministic section-level retrieval for list/enumeration queries."""
+"""Deterministic section-level retrieval for broader-context questions."""
 
 from __future__ import annotations
+
+from typing import TypeAlias
 
 from app.indexing.normalizer import normalize_token
 from app.indexing.tokenizer import tokenize
 from app.storage.models import StoredChunk, StoredSection
 
+ChunkLike: TypeAlias = StoredChunk
+
 _VARIANT_PAIRS = (
     ("architecture", "architectures"),
     ("capability", "capabilities"),
     ("pattern", "patterns"),
+    ("section", "sections"),
+)
+
+_WEAK_WORDS = frozenset(
+    {
+        "what",
+        "are",
+        "different",
+        "mentioned",
+        "pdf",
+        "document",
+        "explain",
+        "tell",
+        "me",
+        "the",
+        "in",
+        "of",
+        "a",
+        "an",
+        "is",
+        "was",
+        "be",
+    }
 )
 
 
@@ -28,37 +55,55 @@ def _expand_variants(terms: set[str]) -> set[str]:
     return expanded
 
 
+def _content_terms(question: str) -> set[str]:
+    terms = _question_terms(question) - _WEAK_WORDS
+    return _expand_variants(terms)
+
+
+def score_section_relevance(question: str, section: StoredSection) -> float:
+    """Score a section title against question terms (higher is better)."""
+    query_terms = _content_terms(question)
+    if not query_terms:
+        return 0.0
+
+    title_terms = _expand_variants(_question_terms(section.title))
+    overlap = query_terms.intersection(title_terms)
+    if not overlap:
+        return 0.0
+
+    score = float(len(overlap))
+    normalized_title = " ".join(tokenize(section.title.lower()))
+    normalized_question = " ".join(tokenize(question.lower()))
+    if section.title.strip().lower() in question.strip().lower():
+        score += 2.0
+    if normalized_title and normalized_title in normalized_question:
+        score += 1.5
+    if title_terms and overlap == title_terms:
+        score += 1.0
+    return score
+
+
 def find_relevant_sections(
     question: str,
     sections: list[StoredSection],
     top_k: int = 3,
 ) -> list[StoredSection]:
-    """Rank sections by lexical overlap between question and section title."""
+    """
+    Rank sections by lexical overlap between question and section title.
+
+    Ranking is deterministic: score descending, then start_line, then section_id.
+    """
     if top_k <= 0 or not sections:
         return []
 
-    query_terms = _expand_variants(_question_terms(question))
-    if not query_terms:
-        return sections[:top_k]
-
     scored: list[tuple[float, StoredSection]] = []
     for section in sections:
-        title_terms = _expand_variants(_question_terms(section.title))
-        overlap = query_terms.intersection(title_terms)
-        if not overlap:
-            continue
+        score = score_section_relevance(question, section)
+        if score > 0:
+            scored.append((score, section))
 
-        score = float(len(overlap))
-        normalized_title = " ".join(tokenize(section.title.lower()))
-        normalized_question = " ".join(tokenize(question.lower()))
-        if section.title.strip().lower() in question.strip().lower():
-            score += 2.0
-        if normalized_title and normalized_title in normalized_question:
-            score += 1.5
-        if len(overlap) == len(title_terms) and title_terms:
-            score += 1.0
-
-        scored.append((score, section))
+    if not scored:
+        return []
 
     scored.sort(
         key=lambda item: (
@@ -72,48 +117,21 @@ def find_relevant_sections(
 
 def collect_section_chunks(
     section: StoredSection,
-    chunks: list[StoredChunk],
-    max_chunks: int = 12,
-) -> list[StoredChunk]:
-    """Collect chunks inside section bounds, with deterministic fallback expansion."""
+    chunks: list[ChunkLike],
+    max_chunks: int = 20,
+) -> list[ChunkLike]:
+    """
+    Collect chunks whose line range falls inside the section line range.
+
+    Chunks are returned in start_line order, capped at max_chunks.
+    """
     if max_chunks <= 0:
         return []
 
     ordered = sorted(chunks, key=lambda item: (item.start_line, item.chunk_id))
-    in_bounds = [
+    selected = [
         chunk
         for chunk in ordered
         if chunk.start_line >= section.start_line and chunk.end_line <= section.end_line
     ]
-
-    if len(in_bounds) >= 2:
-        return in_bounds[:max_chunks]
-
-    # Fallback when end_line is too narrow or section boundaries are imperfect:
-    # collect from section start while section_id/title still align.
-    selected: list[StoredChunk] = []
-    started = False
-    for chunk in ordered:
-        if not started and chunk.start_line >= section.start_line:
-            started = True
-        if not started:
-            continue
-
-        same_section_id = bool(section.section_id) and chunk.section_id == section.section_id
-        same_section_title = (
-            bool(section.title)
-            and bool(chunk.section_title)
-            and chunk.section_title.strip().lower() == section.title.strip().lower()
-        )
-
-        if same_section_id or same_section_title:
-            selected.append(chunk)
-            if len(selected) >= max_chunks:
-                break
-            continue
-
-        if selected:
-            # Stop at first chunk that clearly belongs to another section.
-            break
-
     return selected[:max_chunks]

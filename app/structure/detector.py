@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from app.structure.hierarchy import build_section_hierarchy, infer_section_ranges
 from app.structure.models import DocumentSection
 
 _MARKDOWN_HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
@@ -84,25 +85,6 @@ def _match_heading(line: str) -> tuple[str, int] | None:
     return None
 
 
-def _assign_parent_sections(sections: list[DocumentSection]) -> None:
-    stack: list[DocumentSection] = []
-    for section in sections:
-        while stack and stack[-1].level >= section.level:
-            stack.pop()
-        section.parent_section_id = stack[-1].section_id if stack else None
-        stack.append(section)
-
-
-def _assign_end_lines(sections: list[DocumentSection], line_count: int) -> None:
-    for index, section in enumerate(sections):
-        next_start = None
-        for candidate in sections[index + 1 :]:
-            if candidate.level <= section.level:
-                next_start = candidate.start_line
-                break
-        section.end_line = (next_start - 1) if next_start else line_count
-
-
 def detect_sections(text: str) -> list[DocumentSection]:
     """
     Detect document sections using deterministic, explainable heading rules.
@@ -134,6 +116,5 @@ def detect_sections(text: str) -> list[DocumentSection]:
     if not sections:
         return []
 
-    _assign_parent_sections(sections)
-    _assign_end_lines(sections, len(lines))
-    return sections
+    sections = build_section_hierarchy(sections)
+    return infer_section_ranges(sections, len(lines))

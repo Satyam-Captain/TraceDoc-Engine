@@ -144,7 +144,7 @@ def test_different_architectures_uses_section_level_retrieval(tmp_path: Path) ->
     assert "transformer architecture" not in answer.structured_answer.lower()
     assert len(answer.cards) >= 2
     assert any(
-        "Section-level retrieval for list/enumeration query" in card.why_matched
+        "section-level retrieval" in card.why_matched.lower()
         for card in answer.cards
     )
 
@@ -163,7 +163,7 @@ def test_architecture_structured_answer_returns_only_present_items(tmp_path: Pat
 
     assert answer.answer_mode == ANSWER_MODE_STRUCTURED_EXTRACTIVE
     assert answer.structured_answer is not None
-    assert "two architecture families" in answer.structured_answer.lower()
+    assert "these architecture families" in answer.structured_answer.lower()
     assert "Enterprise search stack" in answer.structured_answer
     assert "Classic QA pipeline" in answer.structured_answer
     assert "Ontology and knowledge-graph stack" not in answer.structured_answer
