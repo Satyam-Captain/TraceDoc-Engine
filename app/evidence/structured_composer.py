@@ -453,12 +453,92 @@ def _compose_generic_enumeration_answer(
     return "\n".join(lines)
 
 
+def compose_structured_answer_from_context(
+    context: object,
+    *,
+    document_schema: DocumentSchema | None = None,
+) -> str | None:
+    """
+    Build a structured answer from unified AnswerContext extraction text.
+
+    Uses the same text as evidence cards (not independently reconstructed snippets).
+    """
+    from app.qa_context import AnswerContext
+
+    if not isinstance(context, AnswerContext):
+        return None
+
+    if not context.extraction_text.strip():
+        context.structured_extraction_failed_reason = "empty_extraction_text"
+        return None
+    if not _should_attempt_structured_answer(context.question):
+        context.structured_extraction_failed_reason = "not_list_enumeration_question"
+        return None
+
+    target_category = context.target_category
+    evidence_text = context.extraction_text
+    cards: list[EvidenceCard] = []
+
+    if (
+        context.validated_entities
+        and target_category
+        and target_category not in {"architecture"}
+    ):
+        min_entities = 1
+        if (
+            context.grammar_result is None
+            or context.grammar_result.extraction_confidence < 0.65
+        ):
+            min_entities = 2
+        if len(context.validated_entities) >= min_entities:
+            intro = _grammar_list_intro(
+                target_category, count=len(context.validated_entities)
+            )
+            return _compose_entity_list_answer(intro, context.validated_entities)
+
+    if target_category == "architecture" or (
+        target_category is None and "architect" in context.question.lower()
+    ):
+        architecture_answer = _compose_architecture_answer(
+            evidence_text,
+            document_schema=document_schema,
+        )
+        if architecture_answer:
+            return architecture_answer
+        context.structured_extraction_failed_reason = (
+            "architecture_enumeration_not_found"
+        )
+        return None
+
+    if target_category and document_schema is not None:
+        schema_answer, _ = _compose_schema_category_answer(
+            evidence_text,
+            target_category,
+            document_schema,
+            cards=cards,
+        )
+        if schema_answer:
+            return schema_answer
+        context.structured_extraction_failed_reason = (
+            f"category_enumeration_not_found:{target_category}"
+        )
+        return None
+
+    items = _extract_generic_enumeration(evidence_text)
+    if len(items) >= 2:
+        return _compose_generic_enumeration_answer(context.question, items)
+
+    context.structured_extraction_failed_reason = "generic_enumeration_insufficient"
+    return None
+
+
 def compose_structured_answer(
     question: str,
     cards: list[EvidenceCard],
     document_schema: DocumentSchema | None = None,
     *,
     target_category: str | None = None,
+    extraction_text: str | None = None,
 ) -> str | None:
     """
     Build a short extractive answer from evidence snippets when confident.
@@ -471,7 +551,7 @@ def compose_structured_answer(
     if not _should_attempt_structured_answer(question):
         return None
 
-    evidence_text = _plain_evidence_text(cards)
+    evidence_text = extraction_text or _plain_evidence_text(cards)
     if not evidence_text.strip():
         return None
 

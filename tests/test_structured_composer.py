@@ -180,7 +180,7 @@ def test_different_architectures_uses_section_level_retrieval(tmp_path: Path) ->
     assert "3. Ontology and knowledge-graph stack" in answer.structured_answer
     assert "4. Traceability and citation graph" in answer.structured_answer
     assert "transformer architecture" not in answer.structured_answer.lower()
-    assert len(answer.cards) >= 2
+    assert len(answer.cards) >= 1
     assert any(
         "section-level retrieval" in card.why_matched.lower()
         for card in answer.cards

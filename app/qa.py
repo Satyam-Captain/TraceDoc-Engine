@@ -6,11 +6,14 @@ from dataclasses import dataclass, field
 
 from app.audit import log_audit_event
 from app.evidence import compose_answer_package, compose_structured_answer
-from app.evidence.extraction_runtime import execute_discovered_grammar_with_result
 from app.evidence.structured_composer import (
     architecture_evidence_text,
     architecture_extraction_trace,
-    grammar_execution_debug_lines,
+)
+from app.qa_context import (
+    build_section_answer_context,
+    context_debug_trace,
+    finalize_answer_context,
 )
 from app.evidence.composer import NO_EVIDENCE_EXPLANATION, NO_EVIDENCE_MESSAGE
 from app.evidence.models import (
@@ -39,10 +42,7 @@ from app.structure.section_assignment import reassign_chunk_sections
 from app.retrieval.models import SearchResult
 from app.schema.discovery import format_category_normalization_trace, match_question_to_schema_category
 from app.schema.query_category import resolve_query_target_category
-from app.schema.registry import (
-    build_pattern_registry,
-    primary_grammar_for_category,
-)
+from app.schema.registry import build_pattern_registry
 from app.schema.models import DocumentSchema
 from app.storage import (
     document_has_index,
@@ -479,6 +479,8 @@ def ask_document(
         retrieved_section_title: str | None = None
         retrieval_strategy = RETRIEVAL_STRATEGY_BM25
         effective_max_cards = max_cards
+        section_package: AnswerPackage | None = None
+        section_answer_context = None
 
         use_section_retrieval = should_use_section_retrieval(
             question, query_intent.intent_type
@@ -528,11 +530,6 @@ def ask_document(
                                 "schema_category_match="
                                 f"{matched_schema_category.normalized_name}"
                             )
-                    debug_trace.append(f"selected_section={best_section.title}")
-                    debug_trace.append(
-                        "selected_section_range="
-                        f"{best_section.start_line}-{best_section.end_line}"
-                    )
                     section_score = score_section_relevance(
                         question,
                         best_section,
@@ -542,101 +539,32 @@ def ask_document(
                     section_chunks = collect_section_chunks(
                         best_section, chunks, max_chunks=20
                     )
-                    debug_trace.append(
-                        f"collected_section_chunks={len(section_chunks)}"
-                    )
-                    chunk_ranges = [
-                        f"{chunk.start_line}-{chunk.end_line}"
-                        for chunk in section_chunks
-                    ]
-                    debug_trace.append(
-                        f"collected_chunk_ranges=[{','.join(chunk_ranges)}]"
-                    )
                     if not section_chunks:
                         debug_trace.append("fallback_reason=no_chunks_in_section")
                     else:
-                        if document_schema is not None and target_category:
-                            grammar = primary_grammar_for_category(
-                                document_schema, target_category
-                            )
-                            if grammar is not None:
-                                debug_trace.append(f"grammar_used={grammar.pattern_name}")
-                                debug_trace.append(
-                                    f"grammar_confidence={grammar.confidence_score:.2f}"
-                                )
-                                template_preview = ";".join(
-                                    grammar.sentence_templates[:4]
-                                )
-                                debug_trace.append(
-                                    f"grammar_sentence_templates=[{template_preview}]"
-                                )
-                                from app.evidence.extraction_validator import (
-                                    build_extraction_validation_registry,
-                                    filter_text_to_category_sentences,
-                                )
-
-                                from app.structure.chunk_section import (
-                                    clip_chunk_text_to_section,
-                                )
-
-                                grammar_text = "\n".join(
-                                    clip_chunk_text_to_section(chunk, best_section)
-                                    for chunk in section_chunks
-                                )
-                                scoped_by_category = {
-                                    target_category: filter_text_to_category_sentences(
-                                        grammar_text,
-                                        target_category,
-                                        document_schema,
-                                    )
-                                }
-                                validation_registry = (
-                                    build_extraction_validation_registry(
-                                        document_schema,
-                                        full_text_by_category=scoped_by_category,
-                                    )
-                                )
-                                grammar_result = execute_discovered_grammar_with_result(
-                                    scoped_by_category[target_category]
-                                    or grammar_text,
-                                    grammar,
-                                    category=target_category,
-                                    validation_registry=validation_registry,
-                                    section_title=best_section.title,
-                                )
-                                debug_trace.extend(
-                                    grammar_execution_debug_lines(grammar_result)
-                                )
-                                if grammar_result.validated_entities:
-                                    preview = ", ".join(
-                                        grammar_result.validated_entities[:8]
-                                    )
-                                    debug_trace.append(
-                                        f"validated_entities=[{preview}]"
-                                    )
-                                if grammar_result.rejected_entities:
-                                    preview = ", ".join(
-                                        grammar_result.rejected_entities[:8]
-                                    )
-                                    debug_trace.append(
-                                        f"rejected_entities=[{preview}]"
-                                    )
-
-                        section_results = _section_results_from_chunks(
-                            best_section,
-                            chunks,
-                            question,
-                            section_score,
+                        section_answer_context = build_section_answer_context(
+                            question=question,
+                            document_name=document.file_name,
+                            section=best_section,
+                            chunks=chunks,
+                            section_score=section_score,
+                            target_category=target_category,
+                            document_schema=document_schema,
                         )
-                        if section_results:
-                            search_results = section_results
+                        section_package = finalize_answer_context(
+                            section_answer_context,
+                            document_schema=document_schema,
+                            max_cards=max_cards,
+                        )
+                        debug_trace.extend(
+                            context_debug_trace(section_answer_context)
+                        )
+                        if section_answer_context.search_results:
+                            search_results = section_answer_context.search_results
                             section_retrieval_used = True
                             retrieved_section_title = best_section.title
                             retrieval_strategy = RETRIEVAL_STRATEGY_SECTION
-                            effective_max_cards = max(
-                                max_cards,
-                                min(len(search_results), 12),
-                            )
+                            effective_max_cards = max(max_cards, 3)
         else:
             debug_trace.append("section_retrieval_skipped=trigger_false")
 
@@ -668,23 +596,27 @@ def ask_document(
             if target_category:
                 debug_trace.append(f"target_category={target_category}")
 
-        package = _apply_structured_answer(
-            compose_answer_package(
+        if section_package is not None:
+            package = section_package
+        else:
+            package = _apply_structured_answer(
+                compose_answer_package(
+                    question,
+                    search_results,
+                    max_cards=effective_max_cards,
+                    all_chunks=chunks,
+                ),
                 question,
-                search_results,
-                max_cards=effective_max_cards,
-                all_chunks=chunks,
-            ),
-            question,
-            document_schema=document_schema,
-            target_category=target_category,
-        )
-        if package.structured_answer and "architect" in question.lower():
-            debug_trace.extend(
-                architecture_extraction_trace(
-                    architecture_evidence_text(package.cards)
-                )
+                document_schema=document_schema,
+                target_category=target_category,
             )
+        if package.structured_answer and "architect" in question.lower():
+            arch_text = (
+                section_answer_context.extraction_text
+                if section_answer_context is not None
+                else architecture_evidence_text(package.cards)
+            )
+            debug_trace.extend(architecture_extraction_trace(arch_text))
 
         result = DocumentQAResult(
             question=package.question,
