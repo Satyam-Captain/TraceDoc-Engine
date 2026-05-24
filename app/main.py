@@ -172,6 +172,12 @@ def _render_question_section(db_path: str) -> None:
                         f"- **Entities:** {', '.join(answer.query_intent.entities)}"
                     )
 
+            st.markdown(f"**Retrieval strategy:** `{answer.retrieval_strategy}`")
+            if answer.retrieved_section_title:
+                st.markdown(
+                    f"**Retrieved section:** {answer.retrieved_section_title}"
+                )
+
             if answer.answer_mode == "NO_EVIDENCE":
                 st.warning(answer.no_evidence_message or "No evidence found.")
                 st.caption(answer.explanation)

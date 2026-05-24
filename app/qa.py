@@ -17,18 +17,15 @@ from app.query import (
     compose_intent_explanation,
     interpret_query,
 )
-from app.query.models import (
-    INTENT_COMPARISON,
-    INTENT_DEFINITION_LOOKUP,
-    INTENT_LIST_REQUEST,
-    INTENT_WHERE_MENTIONED,
-    QueryIntent,
-)
+from app.query.models import QueryIntent
 from app.retrieval import (
     collect_section_chunks,
+    derive_sections_from_chunks,
+    extract_topic_terms,
     find_relevant_sections,
     score_section_relevance,
     search_chunks,
+    should_use_section_retrieval,
 )
 from app.structure.hierarchy import infer_section_ranges
 from app.structure.models import DocumentSection
@@ -44,8 +41,6 @@ from app.storage import (
     load_index_for_document,
 )
 from app.storage.models import StoredSection
-from app.indexing.normalizer import normalize_token
-from app.indexing.tokenizer import tokenize
 
 
 @dataclass
@@ -63,6 +58,11 @@ class DocumentQAResult:
     query_intent: QueryIntent | None = None
     section_retrieval_used: bool = False
     retrieved_section_title: str | None = None
+    retrieval_strategy: str = "BM25_CHUNK"
+
+
+RETRIEVAL_STRATEGY_SECTION = "SECTION_LEVEL"
+RETRIEVAL_STRATEGY_BM25 = "BM25_CHUNK"
 
 
 @dataclass
@@ -78,23 +78,8 @@ class AllDocumentsQAResult:
     document_count: int = 0
     section_retrieval_used: bool = False
     retrieved_section_title: str | None = None
+    retrieval_strategy: str = "BM25_CHUNK"
 
-
-_SECTION_KEYWORDS = (
-    "different",
-    "types",
-    "kinds",
-    "list",
-    "mentioned",
-    "explain",
-    "meaning",
-    "define",
-    "architecture",
-    "architectures",
-    "capability",
-    "capabilities",
-    "lineage",
-)
 
 STRUCTURED_ANSWER_EXPLANATION_SUFFIX = (
     " A structured extractive summary was composed only from retrieved evidence text."
@@ -186,28 +171,15 @@ def _top_score(cards: list[EvidenceCard]) -> float | None:
     return max(card.score for card in cards)
 
 
-def _should_use_section_retrieval(question: str, intent: QueryIntent) -> bool:
-    lower = question.strip().lower()
-    if not lower:
-        return False
-    if intent.intent_type in (
-        INTENT_LIST_REQUEST,
-        INTENT_DEFINITION_LOOKUP,
-        INTENT_WHERE_MENTIONED,
-        INTENT_COMPARISON,
-    ):
-        return True
-    if lower.startswith("what are") or lower.startswith("list"):
-        return True
-    return any(keyword in lower for keyword in _SECTION_KEYWORDS)
-
-
 def _sections_with_inferred_ranges(
     db_path: str,
     document_id: int,
     chunks: list[DocumentChunk],
 ) -> list[StoredSection]:
     stored_sections = get_sections_for_document(db_path, document_id)
+    if not stored_sections:
+        return derive_sections_from_chunks(chunks)
+
     document_sections = [
         DocumentSection(
             section_id=section.section_id,
@@ -248,19 +220,7 @@ def _section_results_from_chunks(
     question: str,
     section_score: float,
 ) -> list[SearchResult]:
-    query_terms = {
-        normalize_token(token) for token in tokenize(question) if normalize_token(token)
-    }
-    for singular, plural in (
-        ("architecture", "architectures"),
-        ("capability", "capabilities"),
-        ("pattern", "patterns"),
-        ("section", "sections"),
-    ):
-        if singular in query_terms:
-            query_terms.add(plural)
-        if plural in query_terms:
-            query_terms.add(singular)
+    query_terms = extract_topic_terms(question)
 
     section_chunks = collect_section_chunks(section, chunks, max_chunks=20)
     results: list[SearchResult] = []
@@ -337,23 +297,26 @@ def ask_document(
         search_results: list[SearchResult] = []
         section_retrieval_used = False
         retrieved_section_title: str | None = None
+        retrieval_strategy = RETRIEVAL_STRATEGY_BM25
         effective_max_cards = max_cards
 
-        if _should_use_section_retrieval(question, query_intent):
+        if should_use_section_retrieval(question, query_intent.intent_type):
             sections = _sections_with_inferred_ranges(db_path, document_id, chunks)
             ranked_sections = find_relevant_sections(question, sections, top_k=3)
             if ranked_sections:
                 best_section = ranked_sections[0]
                 section_score = score_section_relevance(question, best_section)
-                search_results = _section_results_from_chunks(
+                section_results = _section_results_from_chunks(
                     best_section,
                     chunks,
                     question,
                     section_score,
                 )
-                if search_results:
+                if section_results:
+                    search_results = section_results
                     section_retrieval_used = True
                     retrieved_section_title = best_section.title
+                    retrieval_strategy = RETRIEVAL_STRATEGY_SECTION
                     effective_max_cards = max(
                         max_cards,
                         min(len(search_results), 12),
@@ -391,6 +354,7 @@ def ask_document(
             query_intent=query_intent,
             section_retrieval_used=section_retrieval_used,
             retrieved_section_title=retrieved_section_title,
+            retrieval_strategy=retrieval_strategy,
         )
 
         log_audit_event(
@@ -459,6 +423,7 @@ def ask_all_documents(
     chunks_by_document: dict[int, list[DocumentChunk]] = {}
     section_retrieval_used = False
     retrieved_section_title: str | None = None
+    retrieval_strategy = RETRIEVAL_STRATEGY_BM25
 
     for document in documents:
         if not document_has_index(db_path, document.id):
@@ -466,7 +431,7 @@ def ask_all_documents(
         chunks_by_document[document.id] = get_chunks_for_document(db_path, document.id)
         indexed_count += 1
         doc_results: list[SearchResult] = []
-        if _should_use_section_retrieval(question, query_intent):
+        if should_use_section_retrieval(question, query_intent.intent_type):
             sections = _sections_with_inferred_ranges(
                 db_path,
                 document.id,
@@ -485,6 +450,7 @@ def ask_all_documents(
                 if doc_results:
                     section_retrieval_used = True
                     retrieved_section_title = best_section.title
+                    retrieval_strategy = RETRIEVAL_STRATEGY_SECTION
         if not doc_results:
             statistics = load_bm25_statistics(db_path, document.id)
             if not statistics:
@@ -535,4 +501,5 @@ def ask_all_documents(
         document_count=indexed_count,
         section_retrieval_used=section_retrieval_used,
         retrieved_section_title=retrieved_section_title,
+        retrieval_strategy=retrieval_strategy,
     )
