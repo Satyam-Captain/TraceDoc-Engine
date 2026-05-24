@@ -129,6 +129,18 @@ PDF text extraction often loses markdown-style structure, so headings like *Exis
 
 Sample: `samples/pdf_style_document.txt`
 
+## Step 17: PDF layout reconstruction
+
+pypdf and similar extractors flatten page text into long paragraphs, so headings such as *Existing architectures* can appear inline (`...mechanism. Existing architectures The most common...`) instead of on their own line. Section detection then fails because heading heuristics never see isolated lines.
+
+Before structure detection, `app/ingestion/pdf_layout.py` runs **`reconstruct_pdf_layout()`** on PDF-extracted text:
+
+- Inserts blank-line breaks around probable inline headings (title-case phrases, known prefixes, sentence-boundary signals)
+- Rejects URLs, over-long phrases, heavy punctuation, and mostly-lowercase spans
+- **No LLM, embeddings, OCR, or external APIs** — deterministic regex and phrase rules only
+
+This restores semantic section boundaries so stored section counts and section-level retrieval work on real PDFs. Re-process uploaded PDFs after upgrading (or use **Clear all local data** in the UI) so layout reconstruction applies to stored content.
+
 ## Step 15: Section-level retrieval
 
 Chunk-only BM25 can return only the first matching chunk near a heading. For broader questions (for example *different architectures*, *what architectures are mentioned*, *explain lineage*), TraceDoc now:

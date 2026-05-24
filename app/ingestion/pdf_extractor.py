@@ -7,6 +7,8 @@ from typing import Any
 
 from pypdf import PdfReader
 
+from app.ingestion.pdf_layout import reconstruct_pdf_layout
+
 
 def extract_pdf(file_path: str) -> tuple[str, int, dict[str, Any], list[str]]:
     """
@@ -36,4 +38,5 @@ def extract_pdf(file_path: str) -> tuple[str, int, dict[str, Any], list[str]]:
         page_texts.append(extracted)
 
     text = "\n\n".join(page_texts).strip()
+    text = reconstruct_pdf_layout(text)
     return text, page_count, metadata, warnings
