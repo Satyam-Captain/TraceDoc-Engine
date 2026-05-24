@@ -113,6 +113,19 @@ python eval/run_eval.py
 
 Metrics reported: total/passed/failed cases, answer-mode accuracy, `expected_contains` pass rate, and `expected_not_contains` violations. No LLM, embeddings, or external APIs.
 
+### Step 28: Streamlit demo polish
+
+The local UI (`streamlit run app/main.py`) is tuned for architect briefings:
+
+- **Header** — title, “Deterministic Symbolic Document Intelligence”, and constraint line (no LLM / AI / embeddings)
+- **Capabilities panel** — evidence retrieval, section-aware reasoning, schema discovery, grammar extraction, graph matching, audit
+- **Upload & process** — document ID, sections, chunks, schema categories, knowledge-graph node/edge counts
+- **Q&A layout** — **A. Answer** (mode-specific label), **B. Supporting evidence**, **C. Debug trace** (collapsed by default)
+- **Suggested demo questions** — architecture/graph vs policy samples based on indexed document
+- **Demo warning** — answers are deterministic, not free-form AI generation
+
+See [`docs/demo_walkthrough.md`](docs/demo_walkthrough.md) for the full script.
+
 ## Current capabilities
 
 | Layer | Module | Description |
@@ -164,28 +177,42 @@ Uses `data/demo_tracedoc.db` and sample files under `samples/`.
 streamlit run app/main.py
 ```
 
-1. Upload a document (or use files from `samples/`)
-2. Process into the local database
-3. Select a document and ask a question
-4. Review **extractive answers** (when applicable), **supporting evidence cards**, and the audit log
+### Demo flow (architect briefing)
 
-## Demo script (architect briefing)
+| Step | Screen | What the audience sees |
+|------|--------|-------------------------|
+| 1 | Header + capabilities | Constraints banner, six capability bullets, demo warning (no free-form AI) |
+| 2 | Upload & process | Metrics: document ID, sections, chunks, schema categories, graph nodes/edges |
+| 3 | Ask a question | Suggested question chips; intent + retrieval strategy |
+| 4 | A. Answer | Mode label: `GRAPH_STRUCTURED`, `STRUCTURED_EXTRACTIVE`, or `EVIDENCE_ONLY` with plain-English explanation |
+| 5 | B. Supporting evidence | Citation, confidence, highlighted snippet |
+| 6 | C. Debug trace | Collapsed expander — open only for technical depth |
+| 7 | Audit | `document_processed` / `question_asked` JSON events |
 
-Suggested flow—details in [`docs/demo_walkthrough.md`](docs/demo_walkthrough.md):
+Full script: [`docs/demo_walkthrough.md`](docs/demo_walkthrough.md).
 
-1. Show **constraints** in the UI sidebar (no LLM, local-only).
-2. Run `python scripts/smoke_test.py` to prove the pipeline end-to-end.
-3. Open Streamlit; process `samples/hpc6_policy.txt`.
-4. Ask: *What is HPC6 memory policy?* — show intent + evidence card + citation.
-5. Ask: *What is REQ-001?* on `samples/requirements_sample.txt` — show requirement ID handling.
-6. Open **Audit / Traceability** — show `document_processed` and `question_asked` events.
+### Recommended demo questions
 
-**Sample questions**
+**Architecture / symbolic documents** (`samples/system_architectures.txt`, `eval/benchmark_docs/symbolic_architecture_doc.txt`):
+
+- what are different architectures mentioned?
+- what are different design patterns mentioned?
+- What does Enterprise search stack use?
+- What does Classic QA pipeline contain?
+
+**Policy / requirements** (`samples/hpc6_policy.txt`, `samples/requirements_sample.txt`):
 
 - What is HPC6 memory policy?
 - Where is CPU binding mentioned?
 - What is REQ-001?
 - List all storage rules
+
+### Demo limitations (state clearly)
+
+- Answers are **extractive or graph-derived**, not generative summaries.
+- Lexical matching only — no embeddings or synonym expansion.
+- Section and graph quality depend on heading detection and document structure.
+- Re-process documents after upgrading TraceDoc (or **Clear all local data** in the sidebar).
 
 ## Sample documents
 
