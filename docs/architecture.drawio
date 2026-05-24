@@ -1,0 +1,34 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="TraceDoc Pipeline" id="tracedoc-pipeline">
+    <mxGraphModel dx="800" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="ingestion" value="Ingestion" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="100" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="structure" value="Structure" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="180" y="40" width="100" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="indexing" value="Indexing" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="320" y="40" width="100" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="query" value="Query" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="120" width="100" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="retrieval" value="Retrieval" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="180" y="120" width="100" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="evidence" value="Evidence" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="320" y="120" width="100" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="audit" value="Audit" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="460" y="80" width="100" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="storage" value="Storage" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="600" y="80" width="100" height="40" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
