@@ -31,3 +31,30 @@ class AuditEventRecord:
     message: str
     details: dict[str, Any] = field(default_factory=dict)
     created_at: str | None = None
+
+
+@dataclass
+class StoredSection:
+    """Persisted section row used by section-level retrieval."""
+
+    section_id: str
+    title: str
+    level: int
+    start_line: int
+    end_line: int
+    parent_section_id: str | None = None
+
+
+@dataclass
+class StoredChunk:
+    """Persisted chunk row used by section-level retrieval."""
+
+    chunk_id: str
+    document_name: str
+    text: str
+    chunk_type: str
+    start_line: int
+    end_line: int
+    section_title: str | None = None
+    section_id: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)

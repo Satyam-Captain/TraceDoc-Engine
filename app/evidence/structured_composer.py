@@ -83,8 +83,14 @@ def _compose_architecture_answer(evidence_text: str) -> str | None:
     if not found:
         return None
 
-    lines = ["The document describes these architecture families:"]
-    lines.extend(f"- {label}" for label in found)
+    count_word = {
+        1: "one",
+        2: "two",
+        3: "three",
+        4: "four",
+    }.get(len(found), str(len(found)))
+    lines = [f"The document describes {count_word} architecture families:"]
+    lines.extend(f"{index}. {label}" for index, label in enumerate(found, start=1))
     return "\n".join(lines)
 
 

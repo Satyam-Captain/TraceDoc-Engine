@@ -16,6 +16,8 @@ from app.evidence.structured_composer import (
 )
 from app.pipeline import process_document
 from app.qa import ask_document
+from app.retrieval.section_searcher import collect_section_chunks, find_relevant_sections
+from app.storage.models import StoredChunk, StoredSection
 
 
 def _card(snippet: str, *, chunk_id: str = "c1") -> EvidenceCard:
@@ -117,6 +119,57 @@ def test_ask_document_structured_extractive_mode(tmp_path: Path) -> None:
     assert len(answer.cards) >= 1
 
 
+def test_different_architectures_uses_section_level_retrieval(tmp_path: Path) -> None:
+    source = tmp_path / "architectures_section.txt"
+    db_path = tmp_path / "tracedoc.db"
+    source.write_text(
+        "INTRODUCTION\n\n"
+        "This section is unrelated.\n\n"
+        "# Existing architectures\n\n"
+        "The most common pre-generative architecture is the enterprise search stack.\n"
+        "A second architecture is the classic QA pipeline.\n"
+        "A third architecture is the ontology and knowledge-graph stack.\n"
+        "A fourth architecture is the traceability and citation graph.\n",
+        encoding="utf-8",
+    )
+    processed = process_document(str(source), db_path=str(db_path))
+    answer = ask_document("different architectures", processed.document_id, db_path=str(db_path))
+
+    assert answer.answer_mode == ANSWER_MODE_STRUCTURED_EXTRACTIVE
+    assert answer.structured_answer is not None
+    assert "1. Enterprise search stack" in answer.structured_answer
+    assert "2. Classic QA pipeline" in answer.structured_answer
+    assert "3. Ontology and knowledge-graph stack" in answer.structured_answer
+    assert "4. Traceability and citation graph" in answer.structured_answer
+    assert "transformer architecture" not in answer.structured_answer.lower()
+    assert len(answer.cards) >= 2
+    assert any(
+        "Section-level retrieval for list/enumeration query" in card.why_matched
+        for card in answer.cards
+    )
+
+
+def test_architecture_structured_answer_returns_only_present_items(tmp_path: Path) -> None:
+    source = tmp_path / "architectures_partial.txt"
+    db_path = tmp_path / "tracedoc.db"
+    source.write_text(
+        "# Existing architectures\n\n"
+        "The enterprise search stack is commonly used.\n"
+        "A second architecture is the classic QA pipeline.\n",
+        encoding="utf-8",
+    )
+    processed = process_document(str(source), db_path=str(db_path))
+    answer = ask_document("different architectures", processed.document_id, db_path=str(db_path))
+
+    assert answer.answer_mode == ANSWER_MODE_STRUCTURED_EXTRACTIVE
+    assert answer.structured_answer is not None
+    assert "two architecture families" in answer.structured_answer.lower()
+    assert "Enterprise search stack" in answer.structured_answer
+    assert "Classic QA pipeline" in answer.structured_answer
+    assert "Ontology and knowledge-graph stack" not in answer.structured_answer
+    assert "Traceability and citation graph" not in answer.structured_answer
+
+
 def test_no_structured_answer_when_no_evidence(tmp_path: Path) -> None:
     source = tmp_path / "empty_topic.txt"
     db_path = tmp_path / "tracedoc.db"
@@ -138,3 +191,55 @@ def test_non_list_question_stays_evidence_only() -> None:
     answer = compose_structured_answer("where is search mentioned", cards)
 
     assert answer is None
+
+
+def test_section_searcher_and_chunk_collection() -> None:
+    sections = [
+        StoredSection(
+            section_id="s1",
+            title="Overview",
+            level=1,
+            start_line=1,
+            end_line=4,
+            parent_section_id=None,
+        ),
+        StoredSection(
+            section_id="s2",
+            title="Existing architectures",
+            level=1,
+            start_line=5,
+            end_line=10,
+            parent_section_id=None,
+        ),
+    ]
+    ranked = find_relevant_sections("different architecture types", sections, top_k=1)
+
+    assert ranked
+    assert ranked[0].section_id == "s2"
+
+    stored_like_chunks = [
+        StoredChunk(
+            chunk_id="c1",
+            document_name="arch.txt",
+            text="Existing architectures",
+            chunk_type="section",
+            start_line=5,
+            end_line=5,
+            section_title="Existing architectures",
+            section_id="s2",
+            metadata={},
+        ),
+        StoredChunk(
+            chunk_id="c2",
+            document_name="arch.txt",
+            text="The enterprise search stack ...",
+            chunk_type="paragraph",
+            start_line=6,
+            end_line=6,
+            section_title="Existing architectures",
+            section_id="s2",
+            metadata={},
+        ),
+    ]
+    selected = collect_section_chunks(ranked[0], stored_like_chunks, max_chunks=12)
+    assert len(selected) == 2

@@ -17,18 +17,26 @@ from app.query import (
     compose_intent_explanation,
     interpret_query,
 )
-from app.query.models import QueryIntent
-from app.retrieval import search_chunks
+from app.query.models import INTENT_LIST_REQUEST, QueryIntent
+from app.retrieval import (
+    collect_section_chunks,
+    find_relevant_sections,
+    search_chunks,
+)
 from app.retrieval.models import SearchResult
 from app.structure.models import DocumentChunk
 from app.storage import (
     document_has_index,
     get_chunks_for_document,
     get_document_by_id,
+    get_sections_for_document,
     list_documents,
     load_bm25_statistics,
     load_index_for_document,
 )
+from app.storage.models import StoredSection
+from app.indexing.normalizer import normalize_token
+from app.indexing.tokenizer import tokenize
 
 
 @dataclass
@@ -149,6 +157,82 @@ def _top_score(cards: list[EvidenceCard]) -> float | None:
     return max(card.score for card in cards)
 
 
+def _should_use_section_retrieval(question: str, intent: QueryIntent) -> bool:
+    lower = question.strip().lower()
+    if not lower:
+        return False
+    if intent.intent_type == INTENT_LIST_REQUEST:
+        return True
+    if lower.startswith("what are") or lower.startswith("list"):
+        return True
+    if any(term in lower for term in ("different", "types", "kinds")):
+        return True
+    plural_targets = ("architectures", "patterns", "steps", "capabilities")
+    return any(term in lower for term in plural_targets)
+
+
+def _score_section_chunk(chunk: DocumentChunk, query_terms: set[str], rank: int) -> float:
+    text_terms = {
+        normalize_token(token) for token in tokenize(chunk.text) if normalize_token(token)
+    }
+    overlap = len(query_terms.intersection(text_terms))
+    base = 1.0 + (0.3 * overlap)
+    position_decay = max(0.05, 0.6 - (rank * 0.03))
+    return base + position_decay
+
+
+def _section_results_from_chunks(
+    section: StoredSection,
+    chunks: list[DocumentChunk],
+    retrieval_query: str,
+) -> list[SearchResult]:
+    query_terms = {
+        normalize_token(token)
+        for token in tokenize(retrieval_query)
+        if normalize_token(token)
+    }
+    for singular, plural in (
+        ("architecture", "architectures"),
+        ("capability", "capabilities"),
+        ("pattern", "patterns"),
+    ):
+        if singular in query_terms:
+            query_terms.add(plural)
+        if plural in query_terms:
+            query_terms.add(singular)
+    section_chunks = collect_section_chunks(section, chunks, max_chunks=12)
+    results: list[SearchResult] = []
+    for rank, chunk in enumerate(section_chunks):
+        matched_terms = sorted(
+            [term for term in query_terms if term in chunk.text.lower()]
+        )
+        if not matched_terms and rank > 0:
+            # Keep mostly explanatory chunks after heading, but avoid
+            # pulling distant unrelated text.
+            continue
+        score = _score_section_chunk(chunk, query_terms, rank)
+        results.append(
+            SearchResult(
+                chunk_id=chunk.chunk_id,
+                document_name=chunk.document_name,
+                text=chunk.text,
+                score=score,
+                matched_terms=matched_terms,
+                term_scores={term: 1.0 for term in matched_terms},
+                start_line=chunk.start_line,
+                end_line=chunk.end_line,
+                section_title=chunk.section_title,
+                chunk_type=chunk.chunk_type,
+                why_matched=(
+                    "Section-level retrieval for list/enumeration query; "
+                    "chunk selected from ranked relevant section."
+                ),
+                section_id=chunk.section_id,
+            )
+        )
+    return results
+
+
 def ask_document(
     question: str,
     document_id: int,
@@ -193,18 +277,35 @@ def ask_document(
 
         _require_document_index(db_path, document_id)
 
-        index = load_index_for_document(db_path, document_id)
-        bm25_stats = load_bm25_statistics(db_path, document_id)
         retrieval_query = build_retrieval_query(question, query_intent)
-        search_results = search_chunks(
-            retrieval_query,
-            index,
-            bm25_stats,
-            top_k=top_k,
-            intent_type=query_intent.intent_type,
-            entities=query_intent.entities,
-        )
         chunks = get_chunks_for_document(db_path, document_id)
+        search_results: list[SearchResult] = []
+        if _should_use_section_retrieval(question, query_intent):
+            sections = get_sections_for_document(db_path, document_id)
+            ranked_sections = find_relevant_sections(
+                retrieval_query,
+                sections,
+                top_k=3,
+            )
+            if ranked_sections:
+                search_results = _section_results_from_chunks(
+                    ranked_sections[0],
+                    chunks,
+                    retrieval_query,
+                )
+            else:
+                search_results = []
+        if not search_results:
+            index = load_index_for_document(db_path, document_id)
+            bm25_stats = load_bm25_statistics(db_path, document_id)
+            search_results = search_chunks(
+                retrieval_query,
+                index,
+                bm25_stats,
+                top_k=top_k,
+                intent_type=query_intent.intent_type,
+                entities=query_intent.entities,
+            )
         package = _apply_structured_answer(
             compose_answer_package(
                 question,
@@ -295,21 +396,37 @@ def ask_all_documents(
     for document in documents:
         if not document_has_index(db_path, document.id):
             continue
-        statistics = load_bm25_statistics(db_path, document.id)
-        if not statistics:
-            continue
-
-        indexed_count += 1
-        index = load_index_for_document(db_path, document.id)
-        doc_results = search_chunks(
-            retrieval_query,
-            index,
-            statistics,
-            top_k=top_k_per_document,
-            intent_type=query_intent.intent_type,
-            entities=query_intent.entities,
-        )
         chunks_by_document[document.id] = get_chunks_for_document(db_path, document.id)
+        indexed_count += 1
+        doc_results: list[SearchResult] = []
+        if _should_use_section_retrieval(question, query_intent):
+            sections = get_sections_for_document(db_path, document.id)
+            ranked_sections = find_relevant_sections(
+                retrieval_query,
+                sections,
+                top_k=1,
+            )
+            if ranked_sections:
+                doc_results = _section_results_from_chunks(
+                    ranked_sections[0],
+                    chunks_by_document[document.id],
+                    retrieval_query,
+                )
+            else:
+                doc_results = []
+        if not doc_results:
+            statistics = load_bm25_statistics(db_path, document.id)
+            if not statistics:
+                continue
+            index = load_index_for_document(db_path, document.id)
+            doc_results = search_chunks(
+                retrieval_query,
+                index,
+                statistics,
+                top_k=top_k_per_document,
+                intent_type=query_intent.intent_type,
+                entities=query_intent.entities,
+            )
         combined_results.extend(doc_results)
 
     if indexed_count == 0:

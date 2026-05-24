@@ -9,7 +9,11 @@ from typing import Any
 from app.indexing.models import ChunkIndexEntry, InvertedIndex
 from app.ingestion.models import DocumentExtractionResult
 from app.storage.database import connect, initialize_database
-from app.storage.models import AuditEventRecord, DocumentRecord
+from app.storage.models import (
+    AuditEventRecord,
+    DocumentRecord,
+    StoredSection,
+)
 from app.structure.models import DocumentChunk, DocumentSection
 
 
@@ -105,6 +109,34 @@ def get_chunks_for_document(
             )
         )
     return chunks
+
+
+def get_sections_for_document(
+    db_path: str | Path, document_id: int
+) -> list[StoredSection]:
+    """Load stored sections for a document in document order."""
+    with connect(db_path) as connection:
+        rows = connection.execute(
+            """
+            SELECT section_id, title, level, start_line, end_line, parent_section_id
+            FROM sections
+            WHERE document_id = ?
+            ORDER BY start_line ASC, section_id ASC
+            """,
+            (document_id,),
+        ).fetchall()
+
+    return [
+        StoredSection(
+            section_id=row["section_id"],
+            title=row["title"],
+            level=int(row["level"]),
+            start_line=int(row["start_line"]),
+            end_line=int(row["end_line"]),
+            parent_section_id=row["parent_section_id"],
+        )
+        for row in rows
+    ]
 
 
 def get_document_processing_counts(

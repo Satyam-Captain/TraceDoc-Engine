@@ -1,11 +1,12 @@
 """Local SQLite persistence."""
 
 from app.storage.database import connect, initialize_database
-from app.storage.models import AuditEventRecord, DocumentRecord
+from app.storage.models import AuditEventRecord, DocumentRecord, StoredChunk, StoredSection
 from app.storage.repository import (
     add_audit_event,
     document_has_index,
     get_chunks_for_document,
+    get_sections_for_document,
     get_document_by_checksum,
     get_document_by_id,
     get_document_processing_counts,
@@ -20,10 +21,13 @@ from app.storage.repository import (
 __all__ = [
     "AuditEventRecord",
     "DocumentRecord",
+    "StoredChunk",
+    "StoredSection",
     "add_audit_event",
     "connect",
     "document_has_index",
     "get_chunks_for_document",
+    "get_sections_for_document",
     "get_document_by_checksum",
     "get_document_by_id",
     "get_document_processing_counts",

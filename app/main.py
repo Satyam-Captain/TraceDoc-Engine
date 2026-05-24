@@ -177,7 +177,7 @@ def _render_question_section(db_path: str) -> None:
                 st.caption(answer.explanation)
                 return
 
-            if answer.structured_answer:
+            if answer.answer_mode == "STRUCTURED_EXTRACTIVE" and answer.structured_answer:
                 st.markdown("### Extractive answer")
                 st.info(
                     "Composed deterministically from retrieved document text — "
@@ -185,7 +185,7 @@ def _render_question_section(db_path: str) -> None:
                 )
                 st.markdown(answer.structured_answer)
                 st.divider()
-                st.markdown("### Supporting evidence")
+                st.markdown("### Supporting evidence from retrieved section")
 
             st.caption(answer.explanation)
 
