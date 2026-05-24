@@ -1,5 +1,7 @@
 # TraceDoc Engine
 
+[![CI](https://github.com/Satyam-Captain/TraceDoc-Engine/actions/workflows/ci.yml/badge.svg)](https://github.com/Satyam-Captain/TraceDoc-Engine/actions/workflows/ci.yml)
+
 **Deterministic evidence-based document QA engine** for local laptops.
 
 TraceDoc ingests PDF, DOCX, and TXT files, builds a lexical index, and returns **citation-first evidence cards** for each question. For list-like questions it can also show a **structured extractive answer** built only from retrieved snippets—still no LLM or invented content.
@@ -160,6 +162,14 @@ pip install -r requirements.txt
 ```bash
 python -m pytest
 ```
+
+## Continuous integration
+
+On every push and pull request to `master`/`main`, [GitHub Actions](https://github.com/Satyam-Captain/TraceDoc-Engine/actions/workflows/ci.yml) runs on Python 3.11 and 3.12:
+
+- `python -m pytest`
+- `python scripts/smoke_test.py`
+- `python eval/run_eval.py`
 
 ## Run smoke test
 
