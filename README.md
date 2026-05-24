@@ -129,6 +129,19 @@ PDF text extraction often loses markdown-style structure, so headings like *Exis
 
 Sample: `samples/pdf_style_document.txt`
 
+## Step 21: Deterministic schema discovery
+
+Each uploaded document gets a **discovered schema** at processing time (`app/schema/`):
+
+- **Semantic categories** from section headings (architecture, design_pattern, capability, …)
+- **Extraction styles** from repeated ordinal and grammar forms in section text
+- **Pattern registry** mapping categories → discovered pattern names for `pattern_extractor`
+- **Graph candidates** — subject-relation-object triples (`uses`, `contains`, `depends on`, …) as a foundation for future graph reasoning
+
+Schemas persist in SQLite (`document_schemas`). At question time, TraceDoc loads the schema, routes list questions to matching categories, and applies discovered patterns before generic fallback — **no LLM and no manual per-domain hardcoding** for each new category.
+
+Debug trace may include: `discovered_categories=[…]`, `schema_category_match=…`, `schema_patterns=[…]`, `graph_candidates_count=NN`.
+
 ## Step 20: Symbolic relationship inference
 
 When PDF text describes architectures indirectly (for example OpenEphyra as a modular QA implementation, or *this pipeline* in a follow-on sentence), explicit regex extraction is not enough. `app/evidence/symbolic_inference.py` adds **deterministic symbolic rules**:

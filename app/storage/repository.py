@@ -14,6 +14,7 @@ from app.storage.models import (
     DocumentRecord,
     StoredSection,
 )
+from app.schema.models import DocumentSchema, document_schema_from_dict, document_schema_to_dict
 from app.structure.models import DocumentChunk, DocumentSection
 
 
@@ -493,3 +494,50 @@ def list_audit_events(
         )
         for row in rows
     ]
+
+
+def save_document_schema(
+    db_path: str | Path,
+    schema: DocumentSchema,
+) -> None:
+    """Persist discovered document schema as JSON in SQLite."""
+    initialize_database(db_path)
+    payload = _json_dumps(document_schema_to_dict(schema))
+    with connect(db_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO document_schemas (document_id, schema_json)
+            VALUES (?, ?)
+            ON CONFLICT(document_id) DO UPDATE SET schema_json = excluded.schema_json
+            """,
+            (schema.document_id, payload),
+        )
+        connection.commit()
+
+
+def load_document_schema(
+    db_path: str | Path,
+    document_id: int,
+) -> DocumentSchema | None:
+    """Load a persisted document schema, or None if missing."""
+    initialize_database(db_path)
+    with connect(db_path) as connection:
+        row = connection.execute(
+            "SELECT schema_json FROM document_schemas WHERE document_id = ?",
+            (document_id,),
+        ).fetchone()
+    if not row:
+        return None
+    data = _json_loads(row["schema_json"], {})
+    if not data:
+        return None
+    loaded = document_schema_from_dict(data)
+    if loaded.document_id != document_id:
+        return DocumentSchema(
+            document_id=document_id,
+            categories=loaded.categories,
+            discovered_patterns=loaded.discovered_patterns,
+            graph_candidates=loaded.graph_candidates,
+            discovered_sections=loaded.discovered_sections,
+        )
+    return loaded

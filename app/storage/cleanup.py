@@ -38,6 +38,7 @@ def _wipe_database_tables(db_path: Path) -> None:
         "chunk_term_frequencies",
         "index_terms",
         "bm25_statistics",
+        "document_schemas",
         "chunks",
         "sections",
         "audit_events",

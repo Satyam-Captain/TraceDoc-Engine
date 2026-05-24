@@ -14,8 +14,10 @@ from app.storage.repository import (
     list_audit_events,
     list_documents,
     load_bm25_statistics,
+    load_document_schema,
     load_index_for_document,
     save_document_bundle,
+    save_document_schema,
     save_index_bundle,
 )
 
@@ -37,7 +39,9 @@ __all__ = [
     "list_audit_events",
     "list_documents",
     "load_bm25_statistics",
+    "load_document_schema",
     "load_index_for_document",
     "save_document_bundle",
+    "save_document_schema",
     "save_index_bundle",
 ]

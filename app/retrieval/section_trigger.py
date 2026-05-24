@@ -24,6 +24,8 @@ _ENUMERATION_PHRASES = (
     "define",
     "architecture",
     "architectures",
+    "design pattern",
+    "design patterns",
     "architcture",
     "architecure",
     "capability",

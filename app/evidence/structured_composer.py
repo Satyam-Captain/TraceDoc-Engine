@@ -10,6 +10,7 @@ from app.evidence.pattern_extractor import (
     extract_enumerated_phrases_with_trace,
 )
 from app.evidence.sentence_splitter import split_sentences
+from app.schema.models import DocumentSchema
 
 _PLURAL_TARGETS = (
     "architectures",
@@ -101,13 +102,39 @@ def architecture_evidence_text(cards: list[EvidenceCard]) -> str:
     return "\n".join(split_sentences(merged))
 
 
-def _compose_architecture_answer(evidence_text: str) -> str | None:
-    found = extract_enumerated_phrases(evidence_text, "architecture")
+def _compose_architecture_answer(
+    evidence_text: str,
+    document_schema: DocumentSchema | None = None,
+) -> str | None:
+    found = extract_enumerated_phrases(
+        evidence_text,
+        "architecture",
+        document_schema=document_schema,
+    )
     if not found:
         return None
 
     lines = ["The document describes these architecture families:"]
     lines.extend(f"{index}. {label}" for index, label in enumerate(found, start=1))
+    return "\n".join(lines)
+
+
+def _compose_schema_category_answer(
+    evidence_text: str,
+    category: str,
+    document_schema: DocumentSchema,
+) -> str | None:
+    found = extract_enumerated_phrases(
+        evidence_text,
+        category,
+        document_schema=document_schema,
+    )
+    if len(found) < 2:
+        return None
+
+    label = category.replace("_", " ")
+    lines = [f"The document describes these {label} items:"]
+    lines.extend(f"{index}. {item}" for index, item in enumerate(found, start=1))
     return "\n".join(lines)
 
 
@@ -215,6 +242,7 @@ def _compose_generic_enumeration_answer(
 def compose_structured_answer(
     question: str,
     cards: list[EvidenceCard],
+    document_schema: DocumentSchema | None = None,
 ) -> str | None:
     """
     Build a short extractive answer from evidence snippets when confident.
@@ -232,9 +260,32 @@ def compose_structured_answer(
         return None
 
     lower_question = question.lower()
+
+    if document_schema is not None:
+        from app.schema.discovery import match_question_to_schema_category
+
+        matched_category = match_question_to_schema_category(
+            question, document_schema
+        )
+        if (
+            matched_category is not None
+            and matched_category.normalized_name != "architecture"
+        ):
+            schema_text = architecture_evidence_text(cards)
+            schema_answer = _compose_schema_category_answer(
+                schema_text,
+                matched_category.normalized_name,
+                document_schema,
+            )
+            if schema_answer:
+                return schema_answer
+
     if "architect" in lower_question:
         architecture_text = architecture_evidence_text(cards)
-        architecture_answer = _compose_architecture_answer(architecture_text)
+        architecture_answer = _compose_architecture_answer(
+            architecture_text,
+            document_schema=document_schema,
+        )
         if architecture_answer:
             return architecture_answer
 

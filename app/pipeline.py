@@ -14,6 +14,8 @@ from app.storage import (
     save_document_bundle,
     save_index_bundle,
 )
+from app.schema import discover_document_schema
+from app.storage import save_document_schema
 from app.structure import structure_document
 
 
@@ -97,6 +99,8 @@ def process_document(
         duplicate = not created
 
         if created:
+            schema = discover_document_schema(document_id, sections, chunks)
+            save_document_schema(db_path, schema)
             save_index_bundle(db_path, document_id, index, bm25_stats)
             section_count = len(sections)
             chunk_count = len(chunks)

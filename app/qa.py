@@ -35,6 +35,9 @@ from app.structure.hierarchy import infer_section_ranges
 from app.structure.models import DocumentSection
 from app.retrieval.models import SearchResult
 from app.structure.models import DocumentChunk
+from app.schema.discovery import match_question_to_schema_category
+from app.schema.registry import build_pattern_registry
+from app.schema.models import DocumentSchema
 from app.storage import (
     document_has_index,
     get_chunks_for_document,
@@ -42,6 +45,7 @@ from app.storage import (
     get_sections_for_document,
     list_documents,
     load_bm25_statistics,
+    load_document_schema,
     load_index_for_document,
 )
 from app.storage.models import StoredSection
@@ -91,12 +95,20 @@ STRUCTURED_ANSWER_EXPLANATION_SUFFIX = (
 )
 
 
-def _apply_structured_answer(package: AnswerPackage, question: str) -> AnswerPackage:
+def _apply_structured_answer(
+    package: AnswerPackage,
+    question: str,
+    document_schema: DocumentSchema | None = None,
+) -> AnswerPackage:
     """Upgrade answer package to STRUCTURED_EXTRACTIVE when rules match evidence."""
     if package.answer_mode == "NO_EVIDENCE" or not package.cards:
         return package
 
-    structured = compose_structured_answer(question, package.cards)
+    structured = compose_structured_answer(
+        question,
+        package.cards,
+        document_schema=document_schema,
+    )
     if not structured:
         return package
 
@@ -329,11 +341,32 @@ def ask_document(
 
         retrieval_query = build_retrieval_query(question, query_intent)
         chunks = get_chunks_for_document(db_path, document_id)
+        document_schema = load_document_schema(db_path, document_id)
         debug_trace: list[str] = [
             f"intent_type={query_intent.intent_type}",
             f"retrieval_query={retrieval_query!r}",
             f"chunk_count={len(chunks)}",
         ]
+        if document_schema is not None:
+            category_names = sorted(
+                category.normalized_name for category in document_schema.categories
+            )
+            debug_trace.append(f"discovered_categories=[{','.join(category_names)}]")
+            debug_trace.append(
+                f"graph_candidates_count={len(document_schema.graph_candidates)}"
+            )
+            matched_schema_category = match_question_to_schema_category(
+                question, document_schema
+            )
+            if matched_schema_category is not None:
+                debug_trace.append(
+                    f"schema_category_match={matched_schema_category.normalized_name}"
+                )
+                registry = build_pattern_registry(document_schema)
+                pattern_names = registry.get(
+                    matched_schema_category.normalized_name, []
+                )
+                debug_trace.append(f"schema_patterns=[{','.join(pattern_names)}]")
         search_results: list[SearchResult] = []
         section_retrieval_used = False
         retrieved_section_title: str | None = None
@@ -428,6 +461,7 @@ def ask_document(
                 all_chunks=chunks,
             ),
             question,
+            document_schema=document_schema,
         )
         if package.structured_answer and "architect" in question.lower():
             debug_trace.extend(

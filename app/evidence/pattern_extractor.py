@@ -40,21 +40,21 @@ _ORDINAL_ARCHITECTURE_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
         "second_architecture",
         re.compile(
-            r"(?i)a\s+second\s+architecture\s+is\s+(?:the\s+)?(.+?)"
+            r"(?i)(?:a|the)\s+second\s+architecture\s+is\s+(?:the\s+)?(.+?)"
             r"(?=\s*[:;.!?]|(?:\s+)(?:which|that|where|with)\b|$)"
         ),
     ),
     (
         "third_architecture",
         re.compile(
-            r"(?i)a\s+third\s+architecture\s+is\s+(?:the\s+)?(.+?)"
+            r"(?i)(?:a|the)\s+third\s+architecture\s+is\s+(?:the\s+)?(.+?)"
             r"(?=\s*[:;.!?]|(?:\s+)(?:which|that|where|with)\b|$)"
         ),
     ),
     (
         "fourth_architecture",
         re.compile(
-            r"(?i)a\s+(?:fourth|fifth)\s+architecture\s+is\s+(?:the\s+)?(.+?)"
+            r"(?i)(?:a|the)\s+(?:fourth|fifth)\s+architecture\s+is\s+(?:the\s+)?(.+?)"
             r"(?=\s*[:;.!?]|(?:\s+)(?:which|that|where|with)\b|$)"
         ),
     ),
@@ -96,49 +96,7 @@ class ExtractedPhrase:
     inference_type: str = INFERENCE_EXPLICIT
 
 
-def clean_extracted_phrase(phrase: str) -> str:
-    """
-    Normalize a raw captured phrase for display.
-
-    Strips leading articles, trims punctuation, removes trailing explanatory
-  clauses after :, ;, or , and applies light title-casing while preserving
-    known acronyms.
-    """
-    cleaned = phrase.strip()
-    for article in ("the ", "a ", "an "):
-        if cleaned.lower().startswith(article):
-            cleaned = cleaned[len(article) :].strip()
-            break
-
-    cleaned = _STOP_AFTER.split(cleaned, maxsplit=1)[0]
-    for separator in (":", ";", ","):
-        if separator in cleaned:
-            cleaned = cleaned.split(separator, maxsplit=1)[0]
-
-    cleaned = cleaned.strip(" \t\n\r.,;:!?\"'()[]")
-    cleaned = re.sub(r"\s+", " ", cleaned).strip()
-    return _to_display_phrase(cleaned)
-
-
-def _to_display_phrase(phrase: str) -> str:
-    words = phrase.split()
-    if not words:
-        return phrase
-
-    display: list[str] = []
-    for index, word in enumerate(words):
-        bare = word.strip(".,;:!?")
-        upper_bare = bare.upper()
-        if upper_bare in _PRESERVED_ACRONYMS or (len(bare) >= 2 and bare.isupper()):
-            display.append(upper_bare if upper_bare in _PRESERVED_ACRONYMS else bare)
-            continue
-        if index == 0:
-            display.append(bare[:1].upper() + bare[1:] if len(bare) > 1 else bare.upper())
-        elif bare.islower() or (len(bare) > 1 and bare[0].islower()):
-            display.append(bare.lower())
-        else:
-            display.append(bare)
-    return " ".join(display)
+from app.evidence.phrase_cleanup import clean_extracted_phrase
 
 
 def _is_valid_phrase(phrase: str) -> bool:
@@ -338,6 +296,45 @@ def _extract_architecture_phrases(text: str) -> list[ExtractedPhrase]:
     return _merge_explicit_and_symbolic(text, explicit, symbolic)
 
 
+def _extract_from_document_schema(
+    text: str,
+    category: str,
+    document_schema: object,
+) -> list[ExtractedPhrase]:
+    """Apply discovered ordinal and grammar patterns from a document schema."""
+    from app.schema.models import DocumentSchema
+    from app.schema.registry import (
+        regexes_for_discovered_pattern,
+        registry_patterns_for_category,
+    )
+
+    if not isinstance(document_schema, DocumentSchema):
+        return []
+
+    source_lower = text.lower()
+    sentences = split_sentences(text)
+    candidates: list[tuple[int, ExtractedPhrase]] = []
+
+    for pattern in registry_patterns_for_category(document_schema, category):
+        for pattern_label, regex in regexes_for_discovered_pattern(pattern):
+            for sentence in sentences:
+                match = regex.search(sentence)
+                if not match:
+                    continue
+                sentence_offset = text.find(sentence)
+                base = sentence_offset if sentence_offset >= 0 else 0
+                _add_candidate(
+                    candidates,
+                    position=base + match.start(),
+                    value=match.group(1),
+                    source_sentence=sentence,
+                    pattern_name=pattern.pattern_name or pattern_label,
+                    source_lower=source_lower,
+                )
+
+    return _dedupe_by_position(candidates)
+
+
 _CATEGORY_EXTRACTORS: dict[str, Callable[[str], list[ExtractedPhrase]]] = {
     "architecture": _extract_architecture_phrases,
 }
@@ -346,17 +343,31 @@ _CATEGORY_EXTRACTORS: dict[str, Callable[[str], list[ExtractedPhrase]]] = {
 def extract_enumerated_phrases_with_trace(
     text: str,
     category: str,
+    document_schema: object | None = None,
 ) -> list[ExtractedPhrase]:
     """Extract enumerated phrases with source-sentence and pattern traceability."""
     if not text or not text.strip():
         return []
-    extractor = _CATEGORY_EXTRACTORS.get(category.strip().lower())
+
+    normalized_category = category.strip().lower()
+    if document_schema is not None and normalized_category != "architecture":
+        schema_entries = _extract_from_document_schema(
+            text, normalized_category, document_schema
+        )
+        if schema_entries:
+            return schema_entries
+
+    extractor = _CATEGORY_EXTRACTORS.get(normalized_category)
     if extractor is None:
         return []
     return extractor(text)
 
 
-def extract_enumerated_phrases(text: str, category: str) -> list[str]:
+def extract_enumerated_phrases(
+    text: str,
+    category: str,
+    document_schema: object | None = None,
+) -> list[str]:
     """
     Extract entity phrases from evidence text using category-specific rules.
 
@@ -365,5 +376,7 @@ def extract_enumerated_phrases(text: str, category: str) -> list[str]:
     """
     return [
         entry.value
-        for entry in extract_enumerated_phrases_with_trace(text, category)
+        for entry in extract_enumerated_phrases_with_trace(
+            text, category, document_schema=document_schema
+        )
     ]
