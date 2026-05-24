@@ -110,6 +110,45 @@ for hit in results:
 python -m pytest
 ```
 
+## Step 6: Local SQLite storage and index persistence
+
+The Local Storage Layer persists documents, sections, chunks, lexical index postings, BM25 statistics, and audit events in a single **SQLite** database (`sqlite3` only — no ORM). All data stays on disk under your project path (for example `data/index/tracedoc.db`).
+
+**Tables:** `documents`, `sections`, `chunks`, `index_terms`, `chunk_term_frequencies`, `bm25_statistics`, `audit_events`
+
+**Duplicate handling:** the same `checksum_sha256` is not stored twice; `save_document_bundle` returns the existing document id.
+
+**Usage (Python):**
+
+```python
+from app.storage import (
+    initialize_database,
+    save_document_bundle,
+    save_index_bundle,
+    load_index_for_document,
+    load_bm25_statistics,
+)
+from app.indexing import prepare_document_chunks
+from app.structure import structure_document
+
+db_path = "data/index/tracedoc.db"
+initialize_database(db_path)
+
+sections, chunks = structure_document("policy.txt", text)
+document_id = save_document_bundle(db_path, extraction, sections, chunks)
+index, bm25_stats = prepare_document_chunks(chunks)
+save_index_bundle(db_path, document_id, index, bm25_stats)
+
+loaded_index = load_index_for_document(db_path, document_id)
+loaded_stats = load_bm25_statistics(db_path, document_id)
+```
+
+**Run tests:**
+
+```bash
+python -m pytest
+```
+
 ## Layout
 
 - `app/` — ingestion, structure, indexing, query, retrieval, evidence, audit, storage
