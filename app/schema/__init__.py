@@ -18,8 +18,14 @@ from app.schema.models import (
     DocumentSchema,
     GraphCandidate,
 )
+from app.schema.grammar_discovery import (
+    discover_extraction_grammars,
+    discover_grammars_for_categories,
+)
 from app.schema.registry import (
+    build_category_registry,
     build_pattern_registry,
+    primary_grammar_for_category,
     regexes_for_discovered_pattern,
     registry_patterns_for_category,
 )
@@ -29,8 +35,11 @@ __all__ = [
     "DiscoveredPattern",
     "DocumentSchema",
     "GraphCandidate",
+    "build_category_registry",
     "build_pattern_registry",
     "discover_document_schema",
+    "discover_extraction_grammars",
+    "discover_grammars_for_categories",
     "discover_graph_candidates",
     "extract_candidate_category",
     "format_category_normalization_trace",
@@ -38,6 +47,7 @@ __all__ = [
     "normalize_category_name",
     "normalize_heading_text",
     "singularize_term",
+    "primary_grammar_for_category",
     "regexes_for_discovered_pattern",
     "registry_patterns_for_category",
 ]

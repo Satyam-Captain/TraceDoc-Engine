@@ -129,6 +129,12 @@ PDF text extraction often loses markdown-style structure, so headings like *Exis
 
 Sample: `samples/pdf_style_document.txt`
 
+## Step 21.2: Dynamic symbolic grammar discovery
+
+After semantic categories are discovered, TraceDoc inspects section text for **repeated extraction grammars** (for example ordinal enumeration: `The first … is …`, `The second … is …`). Grammars are clustered into families such as `ordinal_pattern_enumeration` and stored as `DiscoveredPattern` metadata (`sentence_templates`, `type_phrases`, `confidence_score`).
+
+`pattern_extractor.py` applies these grammars dynamically via `extract_using_discovered_grammar()` — no hand-coded design-pattern rules. Debug trace may include `discovered_grammar`, `grammar_confidence`, and `grammar_sentence_templates`.
+
 ## Step 21.1: Schema normalization hardening
 
 Semantic categories are derived from headings via `app/schema/normalization.py`:

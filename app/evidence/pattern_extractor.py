@@ -296,41 +296,57 @@ def _extract_architecture_phrases(text: str) -> list[ExtractedPhrase]:
     return _merge_explicit_and_symbolic(text, explicit, symbolic)
 
 
-def _extract_from_document_schema(
+def extract_using_discovered_grammar(
     text: str,
-    category: str,
-    document_schema: object,
+    discovered_pattern: object,
 ) -> list[ExtractedPhrase]:
-    """Apply discovered ordinal and grammar patterns from a document schema."""
-    from app.schema.models import DocumentSchema
-    from app.schema.registry import (
-        regexes_for_discovered_pattern,
-        registry_patterns_for_category,
-    )
+    """Extract entity phrases using one discovered grammar definition."""
+    from app.schema.models import DiscoveredPattern
+    from app.schema.registry import regexes_for_discovered_pattern
 
-    if not isinstance(document_schema, DocumentSchema):
+    if not isinstance(discovered_pattern, DiscoveredPattern):
         return []
 
     source_lower = text.lower()
     sentences = split_sentences(text)
     candidates: list[tuple[int, ExtractedPhrase]] = []
 
+    for pattern_label, regex in regexes_for_discovered_pattern(discovered_pattern):
+        for sentence in sentences:
+            match = regex.search(sentence)
+            if not match:
+                continue
+            sentence_offset = text.find(sentence)
+            base = sentence_offset if sentence_offset >= 0 else 0
+            _add_candidate(
+                candidates,
+                position=base + match.start(),
+                value=match.group(1),
+                source_sentence=sentence,
+                pattern_name=discovered_pattern.pattern_name or pattern_label,
+                source_lower=source_lower,
+            )
+
+    return _dedupe_by_position(candidates)
+
+
+def _extract_from_document_schema(
+    text: str,
+    category: str,
+    document_schema: object,
+) -> list[ExtractedPhrase]:
+    """Apply discovered grammars from a document schema for one category."""
+    from app.schema.models import DocumentSchema
+    from app.schema.registry import registry_patterns_for_category
+
+    if not isinstance(document_schema, DocumentSchema):
+        return []
+
+    candidates: list[tuple[int, ExtractedPhrase]] = []
     for pattern in registry_patterns_for_category(document_schema, category):
-        for pattern_label, regex in regexes_for_discovered_pattern(pattern):
-            for sentence in sentences:
-                match = regex.search(sentence)
-                if not match:
-                    continue
-                sentence_offset = text.find(sentence)
-                base = sentence_offset if sentence_offset >= 0 else 0
-                _add_candidate(
-                    candidates,
-                    position=base + match.start(),
-                    value=match.group(1),
-                    source_sentence=sentence,
-                    pattern_name=pattern.pattern_name or pattern_label,
-                    source_lower=source_lower,
-                )
+        for entry in extract_using_discovered_grammar(text, pattern):
+            position = text.find(entry.source_sentence)
+            candidates.append((position if position >= 0 else len(candidates), entry))
 
     return _dedupe_by_position(candidates)
 
@@ -350,17 +366,33 @@ def extract_enumerated_phrases_with_trace(
         return []
 
     normalized_category = category.strip().lower()
-    if document_schema is not None and normalized_category != "architecture":
+    if document_schema is not None:
         schema_entries = _extract_from_document_schema(
             text, normalized_category, document_schema
         )
-        if schema_entries:
+        if normalized_category == "architecture":
+            builtin_entries = _extract_architecture_phrases(text)
+            if schema_entries or builtin_entries:
+                return _merge_extracted_phrases(text, schema_entries, builtin_entries)
+        elif schema_entries:
             return schema_entries
 
     extractor = _CATEGORY_EXTRACTORS.get(normalized_category)
     if extractor is None:
         return []
     return extractor(text)
+
+
+def _merge_extracted_phrases(
+    text: str,
+    primary: list[ExtractedPhrase],
+    secondary: list[ExtractedPhrase],
+) -> list[ExtractedPhrase]:
+    candidates: list[tuple[int, ExtractedPhrase]] = []
+    for entry in primary + secondary:
+        position = text.find(entry.source_sentence)
+        candidates.append((position if position >= 0 else len(candidates), entry))
+    return _dedupe_by_position(candidates)
 
 
 def extract_enumerated_phrases(

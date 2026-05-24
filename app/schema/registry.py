@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
+from typing import Any
 
+from app.schema.grammar_discovery import flexible_type_fragment
 from app.schema.models import DiscoveredPattern, DocumentSchema
 
 _ORDINAL_PREFIXES: tuple[tuple[str, str], ...] = (
@@ -19,24 +21,11 @@ _STOP_LOOKAHEAD = (
 )
 
 
-def _type_regex_fragment(type_phrase: str) -> str:
-    words = [re.escape(word) for word in type_phrase.split()]
-    return r"\s+".join(words)
-
-
 def regexes_for_discovered_pattern(
     pattern: DiscoveredPattern,
 ) -> list[tuple[str, re.Pattern[str]]]:
-    """Build deterministic extraction regexes for one discovered pattern."""
+    """Build deterministic extraction regexes for one discovered grammar."""
     compiled: list[tuple[str, re.Pattern[str]]] = []
-    type_phrase = pattern.ordinal_type_phrase.strip()
-    if not type_phrase:
-        return compiled
-
-    type_fragment = _type_regex_fragment(type_phrase)
-    for label, prefix in _ORDINAL_PREFIXES:
-        expression = prefix.format(type=type_fragment) + r"(.+?)" + _STOP_LOOKAHEAD
-        compiled.append((label, re.compile(expression)))
 
     if pattern.pattern_name == "most_common_architecture":
         compiled.append(
@@ -48,16 +37,28 @@ def regexes_for_discovered_pattern(
                 ),
             )
         )
+        return compiled
+
+    type_phrases = pattern.type_phrases or (
+        [pattern.ordinal_type_phrase] if pattern.ordinal_type_phrase else []
+    )
+    type_fragment = flexible_type_fragment(type_phrases)
+    if not type_fragment:
+        return compiled
+
+    for label, prefix in _ORDINAL_PREFIXES:
+        expression = prefix.format(type=type_fragment) + r"(.+?)" + _STOP_LOOKAHEAD
+        compiled.append((label, re.compile(expression)))
 
     return compiled
 
 
 def build_pattern_registry(schema: DocumentSchema) -> dict[str, list[str]]:
     """
-    Build a category → pattern_name registry from discovered schema metadata.
+    Build a category → grammar name registry from discovered schema metadata.
 
     Example:
-        {"architecture": ["most_common_architecture", "ordinal_architecture"], ...}
+        {"design_pattern": ["ordinal_design_pattern"], ...}
     """
     registry: dict[str, list[str]] = defaultdict(list)
     for pattern in schema.discovered_patterns:
@@ -66,13 +67,62 @@ def build_pattern_registry(schema: DocumentSchema) -> dict[str, list[str]]:
     return {category: sorted(names) for category, names in registry.items()}
 
 
+def build_category_registry(schema: DocumentSchema) -> dict[str, dict[str, Any]]:
+    """
+    Build rich registry entries with section titles and grammar families.
+
+    Example:
+        {
+            "design_pattern": {
+                "section": "Design patterns for implementation",
+                "grammars": ["ordinal_design_pattern"],
+            }
+        }
+    """
+    category_sections = {
+        category.normalized_name: category.source_section
+        for category in schema.categories
+    }
+    registry: dict[str, dict[str, Any]] = {}
+    for pattern in schema.discovered_patterns:
+        entry = registry.setdefault(
+            pattern.category,
+            {
+                "section": category_sections.get(pattern.category, ""),
+                "grammars": [],
+            },
+        )
+        if pattern.pattern_name not in entry["grammars"]:
+            entry["grammars"].append(pattern.pattern_name)
+    for category in schema.categories:
+        registry.setdefault(
+            category.normalized_name,
+            {
+                "section": category.source_section,
+                "grammars": [],
+            },
+        )
+    return registry
+
+
 def registry_patterns_for_category(
     schema: DocumentSchema,
     category: str,
 ) -> list[DiscoveredPattern]:
-    """Return discovered pattern objects for one category."""
+    """Return discovered grammar objects for one category."""
     return [
         pattern
         for pattern in schema.discovered_patterns
         if pattern.category == category
     ]
+
+
+def primary_grammar_for_category(
+    schema: DocumentSchema,
+    category: str,
+) -> DiscoveredPattern | None:
+    """Return the highest-confidence grammar for a category, if any."""
+    patterns = registry_patterns_for_category(schema, category)
+    if not patterns:
+        return None
+    return max(patterns, key=lambda item: item.confidence_score)

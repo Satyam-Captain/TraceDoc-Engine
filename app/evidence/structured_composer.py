@@ -132,8 +132,12 @@ def _compose_schema_category_answer(
     if len(found) < 2:
         return None
 
-    label = category.replace("_", " ")
-    lines = [f"The document describes these {label} items:"]
+    if category == "design_pattern":
+        intro = "The document mentions these design patterns:"
+    else:
+        label = category.replace("_", " ")
+        intro = f"The document describes these {label} items:"
+    lines = [intro]
     lines.extend(f"{index}. {item}" for index, item in enumerate(found, start=1))
     return "\n".join(lines)
 

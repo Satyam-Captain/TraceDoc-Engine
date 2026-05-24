@@ -39,7 +39,10 @@ from app.schema.discovery import (
     format_category_normalization_trace,
     match_question_to_schema_category,
 )
-from app.schema.registry import build_pattern_registry
+from app.schema.registry import (
+    build_pattern_registry,
+    primary_grammar_for_category,
+)
 from app.schema.models import DocumentSchema
 from app.storage import (
     document_has_index,
@@ -394,6 +397,18 @@ def ask_document(
                     matched_schema_category.normalized_name, []
                 )
                 debug_trace.append(f"schema_patterns=[{','.join(pattern_names)}]")
+                grammar = primary_grammar_for_category(
+                    document_schema, matched_schema_category.normalized_name
+                )
+                if grammar is not None:
+                    debug_trace.append(f"discovered_grammar={grammar.pattern_name}")
+                    debug_trace.append(
+                        f"grammar_confidence={grammar.confidence_score:.2f}"
+                    )
+                    template_preview = ";".join(grammar.sentence_templates[:4])
+                    debug_trace.append(
+                        f"grammar_sentence_templates=[{template_preview}]"
+                    )
         search_results: list[SearchResult] = []
         section_retrieval_used = False
         retrieved_section_title: str | None = None

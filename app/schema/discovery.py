@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import re
 from collections import defaultdict
 
+from app.schema.grammar_discovery import discover_grammars_for_categories
 from app.schema.graph_candidates import discover_graph_candidates
 from app.schema.models import (
     DiscoveredCategory,
@@ -20,28 +20,6 @@ from app.schema.normalization import (
 )
 from app.structure.models import DocumentChunk, DocumentSection
 
-_ORDINAL_FIRST = re.compile(
-    r"(?i)the\s+first\s+(.+?)\s+is\s+(?:the\s+)?(.+?)"
-    r"(?=\s*[:;.!?]|(?:\s+)(?:which|that|where|with)\b|$)"
-)
-_ORDINAL_SECOND = re.compile(
-    r"(?i)(?:a|the)\s+second\s+(.+?)\s+is\s+(?:the\s+)?(.+?)"
-    r"(?=\s*[:;.!?]|(?:\s+)(?:which|that|where|with)\b|$)"
-)
-_ORDINAL_THIRD = re.compile(
-    r"(?i)(?:a|the)\s+third\s+(.+?)\s+is\s+(?:the\s+)?(.+?)"
-    r"(?=\s*[:;.!?]|(?:\s+)(?:which|that|where|with)\b|$)"
-)
-_ORDINAL_FOURTH = re.compile(
-    r"(?i)(?:a|the)\s+(?:fourth|fifth)\s+(.+?)\s+is\s+(?:the\s+)?(.+?)"
-    r"(?=\s*[:;.!?]|(?:\s+)(?:which|that|where|with)\b|$)"
-)
-_MOST_COMMON_IS = re.compile(
-    r"(?i)the\s+most\s+common\b.+?\bis\s+(?:the\s+)?(.+?)"
-    r"(?=\s*[:;.!?]|(?:\s+)(?:which|that|where|with)\b|$)"
-)
-
-
 def category_from_heading(title: str) -> tuple[str, float] | None:
     """Map a section heading to a semantic category using normalization rules."""
     category = extract_candidate_category(title)
@@ -51,10 +29,6 @@ def category_from_heading(title: str) -> tuple[str, float] | None:
     if not meets_category_confidence_threshold(score):
         return None
     return category, score
-
-
-def _canonical_type_phrase(type_phrase: str) -> str:
-    return re.sub(r"\s+", " ", type_phrase.strip().lower())
 
 
 def _discover_categories_from_chunk_headings(
@@ -157,20 +131,18 @@ def _discover_patterns_from_chunks(
         category.source_section.lower(): category.normalized_name
         for category in categories
     }
-    category_by_normalized = {
-        normalize_heading_text(category.source_section): category.normalized_name
-        for category in categories
-    }
-    category_by_section_title.update(category_by_normalized)
+    category_by_section_title.update(
+        {
+            normalize_heading_text(category.source_section): category.normalized_name
+            for category in categories
+        }
+    )
 
     if categories and not sections:
         default_category = max(categories, key=lambda item: item.confidence_score)
         section_categories.setdefault("__default__", default_category.normalized_name)
 
-    hits: dict[tuple[str, str], dict[str, object]] = {}
-    examples: dict[tuple[str, str], list[str]] = defaultdict(list)
-
-    for chunk in chunks:
+    def resolve_category(chunk: DocumentChunk) -> str:
         category = _category_for_chunk(
             chunk,
             sections,
@@ -178,74 +150,10 @@ def _discover_patterns_from_chunks(
             category_by_section_title,
         )
         if not category and "__default__" in section_categories:
-            category = section_categories["__default__"]
-        if not category:
-            continue
+            return section_categories["__default__"]
+        return category
 
-        text = chunk.text
-        for regex, ordinal_label in (
-            (_ORDINAL_FIRST, "the first"),
-            (_ORDINAL_SECOND, "second"),
-            (_ORDINAL_THIRD, "third"),
-            (_ORDINAL_FOURTH, "fourth"),
-        ):
-            for match in regex.finditer(text):
-                type_phrase = _canonical_type_phrase(match.group(1))
-                key = (category, type_phrase)
-                entry = hits.setdefault(
-                    key,
-                    {"count": 0, "triggers": set(), "ordinal_type_phrase": type_phrase},
-                )
-                entry["count"] = int(entry["count"]) + 1
-                triggers = entry["triggers"]
-                assert isinstance(triggers, set)
-                triggers.add(f"{ordinal_label} {type_phrase} is")
-                sentence = match.group(0).strip()
-                if sentence and len(examples[key]) < 3:
-                    examples[key].append(sentence[:200])
-
-        if category == "architecture":
-            for match in _MOST_COMMON_IS.finditer(text):
-                key = (category, "architecture")
-                entry = hits.setdefault(
-                    key,
-                    {
-                        "count": 0,
-                        "triggers": set(),
-                        "ordinal_type_phrase": "architecture",
-                    },
-                )
-                entry["count"] = int(entry["count"]) + 1
-                triggers = entry["triggers"]
-                assert isinstance(triggers, set)
-                triggers.add("the most common architecture is")
-                sentence = match.group(0).strip()
-                if sentence and len(examples[key]) < 3:
-                    examples[key].append(sentence[:200])
-
-    patterns: list[DiscoveredPattern] = []
-    for (category, type_phrase), entry in sorted(hits.items()):
-        count = int(entry["count"])
-        if count < 1:
-            continue
-        triggers = entry["triggers"]
-        assert isinstance(triggers, set)
-        if category == "architecture" and type_phrase == "architecture":
-            pattern_name = "most_common_architecture"
-        else:
-            pattern_name = f"ordinal_{category}"
-
-        patterns.append(
-            DiscoveredPattern(
-                pattern_name=pattern_name,
-                category=category,
-                trigger_phrases=sorted(triggers),
-                example_sentences=examples[(category, type_phrase)],
-                ordinal_type_phrase=str(entry["ordinal_type_phrase"]),
-            )
-        )
-
-    return patterns
+    return discover_grammars_for_categories(categories, chunks, resolve_category)
 
 
 def _attach_patterns_to_categories(

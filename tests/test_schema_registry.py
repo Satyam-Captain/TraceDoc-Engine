@@ -10,7 +10,8 @@ from app.structure import structure_document
 DESIGN_PATTERNS_SECTION = (
     "Design patterns for implementation\n\n"
     "The first critical design pattern is section-aware ingestion.\n"
-    "The second design pattern is multi-granular indexing.\n"
+    "The second pattern is multi-granular indexing.\n"
+    "The third pattern is deterministic query interpretation.\n"
 )
 
 
