@@ -81,6 +81,17 @@ Debug trace fields: `question_graph_built`, `qgraph_nodes`, `qgraph_edges`, `qgr
 
 A future step will **match** the question graph against the document knowledge graph; this step does not change answers yet.
 
+### Step 25: Deterministic graph matcher
+
+`app/graph/matcher.py` matches the question graph against the document knowledge graph using symbolic rules only:
+
+- Forward relations (`uses`, `contains`, …): entity label + relation → target nodes
+- Reverse relations (`implements`): target label + relation → source nodes
+- Category/list queries: nodes whose type/category match `architecture`, `design_pattern`, etc.
+- Definition queries: seed entity + `definition` / `refers_to` edges
+
+Scoring is deterministic (exact label, relation, category type, source sentence, section). Results appear in the QA debug trace (`graph_match_count`, `graph_top_match`, `graph_answer_entities`). **Answers still use the tree/section path**; graph matching is trace-only until the next integration step.
+
 ## Current capabilities
 
 | Layer | Module | Description |

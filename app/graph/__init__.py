@@ -6,6 +6,12 @@ from app.graph.extractor import (
     split_object_list,
 )
 from app.graph.models import GraphEdge, GraphNode, KnowledgeGraph, normalize_graph_label
+from app.graph.matcher import (
+    GraphMatch,
+    graph_match_debug_lines,
+    label_match_score,
+    match_question_graph,
+)
 from app.graph.traversal import (
     find_edges_by_relation,
     find_nodes_by_label,
@@ -14,6 +20,7 @@ from app.graph.traversal import (
 )
 
 __all__ = [
+    "GraphMatch",
     "GraphEdge",
     "GraphNode",
     "KnowledgeGraph",
@@ -23,6 +30,9 @@ __all__ = [
     "find_nodes_by_label",
     "get_neighbors",
     "get_subgraph_for_node",
+    "graph_match_debug_lines",
+    "label_match_score",
+    "match_question_graph",
     "normalize_graph_label",
     "split_object_list",
 ]

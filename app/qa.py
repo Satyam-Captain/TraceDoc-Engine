@@ -28,6 +28,7 @@ from app.query import (
     interpret_query,
 )
 from app.query.models import QueryIntent
+from app.graph.matcher import graph_match_debug_lines, match_question_graph
 from app.question_graph import build_question_graph, question_graph_debug_lines
 from app.retrieval import (
     collect_section_chunks,
@@ -463,10 +464,16 @@ def ask_document(
             debug_trace.append("graph_loaded=True")
             debug_trace.append(f"graph_node_count={len(knowledge_graph.nodes)}")
             debug_trace.append(f"graph_edge_count={len(knowledge_graph.edges)}")
+            graph_matches = match_question_graph(
+                question_graph, knowledge_graph, top_k=5
+            )
+            debug_trace.extend(graph_match_debug_lines(graph_matches))
         else:
             debug_trace.append("graph_loaded=False")
             debug_trace.append("graph_node_count=0")
             debug_trace.append("graph_edge_count=0")
+            debug_trace.append("graph_matching_used=False")
+            debug_trace.append("graph_match_count=0")
         if document_schema is not None:
             category_names = sorted(
                 category.normalized_name for category in document_schema.categories
