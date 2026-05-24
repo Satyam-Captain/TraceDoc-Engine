@@ -1,33 +1,206 @@
-<mxfile host="app.diagrams.net">
-  <diagram name="TraceDoc Pipeline" id="tracedoc-pipeline">
-    <mxGraphModel dx="800" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+<mxfile host="app.diagrams.net" agent="TraceDoc Engine" version="22.1.0" type="device">
+  <diagram id="tracedoc-engine-architecture" name="TraceDoc Engine Architecture">
+    <mxGraphModel dx="1200" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="1654" math="0" shadow="0">
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
-        <mxCell id="ingestion" value="Ingestion" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-          <mxGeometry x="40" y="40" width="100" height="40" as="geometry"/>
+
+        <!-- Governance boundary -->
+        <mxCell id="gov-boundary" value="Governance / Constraints&#xa;(No LLM · No ML · No embeddings · No external API · Local-only)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=1;dashPattern=8 8;verticalAlign=top;fontStyle=1;fontSize=11;spacingTop=8;align=center;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="1080" height="1320" as="geometry"/>
         </mxCell>
-        <mxCell id="structure" value="Structure" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-          <mxGeometry x="180" y="40" width="100" height="40" as="geometry"/>
+
+        <!-- Title -->
+        <mxCell id="title" value="TraceDoc Engine — Logical Architecture" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontStyle=1;fontSize=16;" vertex="1" parent="1">
+          <mxGeometry x="340" y="60" width="480" height="30" as="geometry"/>
         </mxCell>
-        <mxCell id="indexing" value="Indexing" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-          <mxGeometry x="320" y="40" width="100" height="40" as="geometry"/>
+
+        <!-- User Interface -->
+        <mxCell id="ui" value="User Interface&#xa;(upload · ask · browse answer cards)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="384" y="110" width="392" height="56" as="geometry"/>
         </mxCell>
-        <mxCell id="query" value="Query" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-          <mxGeometry x="40" y="120" width="100" height="40" as="geometry"/>
+
+        <!-- Application API Layer -->
+        <mxCell id="api" value="Application API Layer&#xa;(REST/CLI contracts · validation · session orchestration)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="304" y="200" width="552" height="56" as="geometry"/>
         </mxCell>
-        <mxCell id="retrieval" value="Retrieval" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-          <mxGeometry x="180" y="120" width="100" height="40" as="geometry"/>
+
+        <!-- Indexing swimlane label -->
+        <mxCell id="lane-index-label" value="Document preparation (offline)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontStyle=2;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="80" y="290" width="220" height="24" as="geometry"/>
         </mxCell>
-        <mxCell id="evidence" value="Evidence" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-          <mxGeometry x="320" y="120" width="100" height="40" as="geometry"/>
+
+        <!-- Document Ingestion Pipeline -->
+        <mxCell id="ingestion" value="Document Ingestion Pipeline&#xa;(format detect · normalize · checksum · manifest)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="80" y="320" width="240" height="64" as="geometry"/>
         </mxCell>
-        <mxCell id="audit" value="Audit" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-          <mxGeometry x="460" y="80" width="100" height="40" as="geometry"/>
+
+        <!-- Structure Extraction Layer -->
+        <mxCell id="structure" value="Structure Extraction Layer&#xa;(headings · sections · tables · lists · anchors)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="360" y="320" width="240" height="64" as="geometry"/>
         </mxCell>
-        <mxCell id="storage" value="Storage" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-          <mxGeometry x="600" y="80" width="100" height="40" as="geometry"/>
+
+        <!-- Knowledge Preparation Layer -->
+        <mxCell id="knowledge" value="Knowledge Preparation Layer&#xa;(lexical indexes · term stats · span registry · metadata)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="640" y="320" width="280" height="64" as="geometry"/>
         </mxCell>
+
+        <!-- Query swimlane label -->
+        <mxCell id="lane-query-label" value="Question answering (online)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontStyle=2;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="80" y="430" width="220" height="24" as="geometry"/>
+        </mxCell>
+
+        <!-- Rule-Based Query Interpreter -->
+        <mxCell id="query-interpreter" value="Rule-Based Query Interpreter&#xa;(tokenize · intent rules · filters · query plan)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="80" y="460" width="240" height="64" as="geometry"/>
+        </mxCell>
+
+        <!-- Deterministic Retrieval Core -->
+        <mxCell id="retrieval" value="Deterministic Retrieval Core&#xa;(exact · phrase · boolean · rank fusion — reproducible)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="360" y="460" width="280" height="64" as="geometry"/>
+        </mxCell>
+
+        <!-- Evidence Engine -->
+        <mxCell id="evidence" value="Evidence Engine&#xa;(span scoring · overlap · provenance · confidence rules)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="680" y="460" width="240" height="64" as="geometry"/>
+        </mxCell>
+
+        <!-- Answer Card Composer -->
+        <mxCell id="answer-card" value="Answer Card Composer&#xa;(cited excerpts · source refs · structured response)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="360" y="580" width="400" height="64" as="geometry"/>
+        </mxCell>
+
+        <!-- Local Storage Layer -->
+        <mxCell id="storage" value="Local Storage Layer&#xa;(raw uploads · structured artifacts · indexes · audit log · answer cache)" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=12;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="304" y="700" width="552" height="80" as="geometry"/>
+        </mxCell>
+
+        <!-- Audit (cross-cutting, small) -->
+        <mxCell id="audit" value="Audit trail&#xa;(append-only events)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="920" y="700" width="160" height="56" as="geometry"/>
+        </mxCell>
+
+        <!-- Future Enterprise Upgrade Path -->
+        <mxCell id="future-boundary" value="Future Enterprise Upgrade Path (out of scope v1)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#999999;dashed=1;dashPattern=4 4;verticalAlign=top;fontStyle=2;fontSize=10;spacingTop=6;align=center;" vertex="1" parent="1">
+          <mxGeometry x="80" y="820" width="1000" height="200" as="geometry"/>
+        </mxCell>
+        <mxCell id="future-sso" value="SSO / RBAC" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="120" y="870" width="140" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="future-multi" value="Multi-tenant storage" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="290" y="870" width="160" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="future-policy" value="Central policy service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="480" y="870" width="160" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="future-connector" value="Enterprise connectors&#xa;(SharePoint · Confluence)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="670" y="870" width="180" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="future-observe" value="Observability export" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="880" y="870" width="160" height="40" as="geometry"/>
+        </mxCell>
+
+        <!-- Legend -->
+        <mxCell id="legend" value="Solid arrows: primary data flow  |  Dashed: governance / audit / future hooks" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=10;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="280" y="1060" width="600" height="24" as="geometry"/>
+        </mxCell>
+
+        <!-- Edges: UI to API -->
+        <mxCell id="e-ui-api" edge="1" parent="1" source="ui" target="api" style="endArrow=classic;html=1;strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- API to indexing path -->
+        <mxCell id="e-api-ingestion" edge="1" parent="1" source="api" target="ingestion" style="endArrow=classic;html=1;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e-ingestion-structure" edge="1" parent="1" source="ingestion" target="structure" style="endArrow=classic;html=1;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e-structure-knowledge" edge="1" parent="1" source="structure" target="knowledge" style="endArrow=classic;html=1;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e-knowledge-storage" edge="1" parent="1" source="knowledge" target="storage" style="endArrow=classic;html=1;strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="780" y="420"/>
+              <mxPoint x="780" y="680"/>
+              <mxPoint x="580" y="680"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- API to query path -->
+        <mxCell id="e-api-query" edge="1" parent="1" source="api" target="query-interpreter" style="endArrow=classic;html=1;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="200" y="228"/>
+              <mxPoint x="200" y="440"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-query-retrieval" edge="1" parent="1" source="query-interpreter" target="retrieval" style="endArrow=classic;html=1;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e-retrieval-evidence" edge="1" parent="1" source="retrieval" target="evidence" style="endArrow=classic;html=1;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e-evidence-answer" edge="1" parent="1" source="evidence" target="answer-card" style="endArrow=classic;html=1;strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="800" y="560"/>
+              <mxPoint x="560" y="560"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-answer-api" edge="1" parent="1" source="answer-card" target="api" style="endArrow=classic;html=1;dashed=0;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="560" y="660"/>
+              <mxPoint x="900" y="660"/>
+              <mxPoint x="900" y="228"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Retrieval reads storage -->
+        <mxCell id="e-storage-retrieval" value="read indexes" edge="1" parent="1" source="storage" target="retrieval" style="endArrow=classic;html=1;dashed=1;strokeColor=#9673a6;">
+          <mxGeometry relative="1" x="-0.2" y="10" as="geometry">
+            <mxPoint as="offset"/>
+            <Array as="points">
+              <mxPoint x="500" y="680"/>
+              <mxPoint x="500" y="524"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Ingestion writes storage -->
+        <mxCell id="e-ingestion-storage" value="write raw" edge="1" parent="1" source="ingestion" target="storage" style="endArrow=classic;html=1;dashed=1;strokeColor=#9673a6;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="200" y="680"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Audit cross-cutting -->
+        <mxCell id="e-api-audit" edge="1" parent="1" source="api" target="audit" style="endArrow=classic;html=1;dashed=1;strokeColor=#666666;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e-evidence-audit" edge="1" parent="1" source="evidence" target="audit" style="endArrow=classic;html=1;dashed=1;strokeColor=#666666;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Future hooks (dashed from API) -->
+        <mxCell id="e-api-future" edge="1" parent="1" source="api" target="future-policy" style="endArrow=open;html=1;dashed=1;strokeColor=#999999;endFill=0;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="560" y="280"/>
+              <mxPoint x="560" y="850"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
       </root>
     </mxGraphModel>
   </diagram>
