@@ -76,6 +76,20 @@ DEMO_WARNING = (
     "answers from extracted evidence, symbolic rules, and graph matches."
 )
 
+ARCHITECTURE_IMAGES_DIR = PROJECT_ROOT / "docs" / "images"
+ARCHITECTURE_DIAGRAMS: tuple[tuple[str, str], ...] = (
+    ("architecture-overview.png", "System overview (v0.1.0)"),
+    ("architecture-document-pipeline.png", "Document processing pipeline (offline)"),
+    ("architecture-qa-flow.png", "Question answering & answer modes (online)"),
+    ("architecture-storage-modules.png", "SQLite persistence & app/ modules"),
+)
+ARCHITECTURE_DOC_URL = (
+    "https://github.com/Satyam-Captain/TraceDoc-Engine/blob/master/docs/architecture.md"
+)
+ARCHITECTURE_DRAWIO_URL = (
+    "https://github.com/Satyam-Captain/TraceDoc-Engine/blob/master/docs/architecture.drawio"
+)
+
 
 @dataclass(frozen=True)
 class DocumentIndexMetadata:
@@ -510,6 +524,46 @@ def _render_question_section(db_path: str) -> None:
             st.error(f"Search failed: {error}")
 
 
+def _architecture_image_path(filename: str) -> Path | None:
+    path = ARCHITECTURE_IMAGES_DIR / filename
+    return path if path.is_file() else None
+
+
+def _render_architecture_section() -> None:
+    st.header("Architecture")
+    st.caption(
+        "Deterministic symbolic document intelligence — no LLM, embeddings, or external APIs."
+    )
+    st.markdown(
+        f"- Full narrative: [architecture.md]({ARCHITECTURE_DOC_URL})\n"
+        f"- Editable diagram source: [architecture.drawio]({ARCHITECTURE_DRAWIO_URL})"
+    )
+
+    missing = [
+        filename
+        for filename, _ in ARCHITECTURE_DIAGRAMS
+        if _architecture_image_path(filename) is None
+    ]
+    if missing:
+        st.warning(
+            "Architecture images not found in `docs/images/`: "
+            + ", ".join(missing)
+        )
+
+    for filename, caption in ARCHITECTURE_DIAGRAMS:
+        image_path = _architecture_image_path(filename)
+        if image_path is None:
+            continue
+        st.markdown(f"#### {caption}")
+        st.image(str(image_path), use_container_width=True)
+
+    st.divider()
+    st.markdown(
+        "**Release:** v0.1.0 · Evidence → section/tree → schema/grammar → "
+        "knowledge graph → BM25 fallback"
+    )
+
+
 def _render_audit_section(db_path: str) -> None:
     st.header("Audit / Traceability")
     st.caption("Append-only local audit log for document processing and questions.")
@@ -544,10 +598,22 @@ def main() -> None:
         page_icon="📄",
         layout="wide",
     )
-    initialize_database(DB_PATH)
     _render_header()
     _render_capability_panel()
     st.divider()
+
+    view = st.sidebar.radio(
+        "View",
+        options=("Document QA demo", "Architecture"),
+        index=0,
+        help="Switch between the live demo and architecture diagrams.",
+    )
+
+    if view == "Architecture":
+        _render_architecture_section()
+        return
+
+    initialize_database(DB_PATH)
     _render_sidebar(DB_PATH)
     _render_upload_section(DB_PATH)
     st.divider()

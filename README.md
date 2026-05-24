@@ -42,7 +42,7 @@ Question → Query Interpreter → Section Tree Retrieval → Evidence Cards
                                     Audit log (append-only)
 ```
 
-Full logical architecture: [`docs/architecture.md`](docs/architecture.md) and [`docs/architecture.drawio`](docs/architecture.drawio).
+Full logical architecture (v0.1.0): [`docs/architecture.md`](docs/architecture.md) and [`docs/architecture.drawio`](docs/architecture.drawio) (4 pages — open in [diagrams.net](https://app.diagrams.net)). Diagrams are also in the hosted app under sidebar **View → Architecture** ([`docs/images/`](docs/images/)).
 
 ### Document semantic tree
 
@@ -403,7 +403,7 @@ tracedoc-engine/
   app/           Application code
   config/        Configuration placeholders
   data/          Local DB and uploads (gitignored contents)
-  docs/          Architecture and demo walkthrough
+  docs/          architecture.md, architecture.drawio (4 pages), images/
   samples/       Demo TXT documents
   eval/          Deterministic QA benchmark (docs, questions.yaml, run_eval.py)
   scripts/       smoke_test.py

@@ -1,181 +1,427 @@
-# TraceDoc Engine — Architecture
+# TraceDoc Engine — Architecture (v0.1.0)
 
-**Version:** 0.1 (architecture baseline)  
+**Version:** 0.1.0  
+**Status:** Implemented demo release  
 **Audience:** Solution architects, technical leads, security reviewers  
-**Companion artifact:** [`architecture.drawio`](architecture.drawio)
+**Diagrams:** [`architecture.drawio`](architecture.drawio) (open in [diagrams.net](https://app.diagrams.net))  
+**Exported images:** [`images/`](images/) (place PNG/SVG after export — see [`images/README.md`](images/README.md))
 
 ---
 
 ## 1. Executive summary
 
-TraceDoc Engine is a **local, deterministic document question-answering system**. Users upload documents, ask natural-language questions, and receive **answer cards**: structured responses composed from cited source spans, with full provenance and reproducible ranking.
+TraceDoc Engine is a **local, deterministic document question-answering system**. Users upload PDF, DOCX, or TXT files; the engine builds lexical indexes, a semantic tree, a discovered schema, and a symbolic knowledge graph. Questions receive **verifiable answers** in one of four modes—never free-form generative text.
 
-The system is intentionally **non-generative**. It does not call LLMs, embedding models, or external APIs. All behavior is driven by explicit rules, lexical indexes, and deterministic scoring—making outcomes auditable and suitable for regulated or offline environments.
+| Guarantee | Mechanism |
+|-----------|-----------|
+| No LLM / generative AI | Answers assembled from spans, grammars, and graph edges only |
+| No embeddings / vector DB | Inverted index + BM25 + section title matching |
+| No external APIs | SQLite + local file I/O |
+| Reproducibility | Fixed rules, scores, and tie-breaking |
+| Traceability | Evidence cards + append-only audit log + debug trace |
+
+**Entry points:** `app/main.py` (Streamlit), `app/pipeline.py` (`process_document`), `app/qa.py` (`ask_document`), `eval/run_eval.py` (regression benchmark).
 
 ---
 
 ## 2. Design principles
 
-| Principle | Implication |
-|-----------|-------------|
-| **Determinism** | Same document set, index version, and question yield the same ranked evidence and answer card. |
-| **Evidence-first** | Answers are assemblies of cited spans, not paraphrased prose from a model. |
-| **Local-only** | Processing and storage remain on the host machine; no network dependency for core paths. |
-| **Separation of paths** | Document preparation (offline) and question answering (online) are distinct pipelines sharing storage. |
-| **Governance by construction** | Forbidden capabilities (ML, embeddings, cloud inference) are architectural exclusions, not runtime options. |
+| Principle | Implementation |
+|-----------|----------------|
+| Evidence-first | Every claim maps to citation, line range, or graph source sentence |
+| Determinism | Same document version + question → same mode, ranking, and extractive text |
+| Separation of paths | **Offline** document preparation vs **online** question answering |
+| Single extraction source (section path) | Semantic tree section text drives structured answers and evidence (`app/qa_context.py`) |
+| Governance by exclusion | ML, embeddings, and cloud inference are out of scope—not runtime toggles |
 
 ---
 
-## 3. Logical architecture
+## 3. System context
 
-The logical architecture comprises twelve concerns. The diagram groups them into presentation, orchestration, two processing pipelines, cross-cutting governance, persistence, and a deferred enterprise envelope.
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  User (browser / CLI / tests)                                    │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+         ┌───────────────────┼───────────────────┐
+         ▼                   ▼                   ▼
+  app/main.py          app/pipeline.py      app/qa.py
+  (Streamlit UI)       process_document()   ask_document()
+         │                   │                   │
+         └───────────────────┴───────────────────┘
+                             │
+                             ▼
+              app/storage/  →  SQLite (data/tracedoc.db)
+              data/uploads/ , data/index/
+                             │
+         ┌───────────────────┴───────────────────┐
+         ▼                                       ▼
+  eval/run_eval.py                      scripts/smoke_test.py
+  (benchmark regression)                (CI + local validation)
+```
 
-### 3.1 User Interface
+**Companion diagram pages** in `architecture.drawio`:
 
-Presents upload workflows, question input, and answer-card browsing. The UI does not implement retrieval logic; it delegates to the Application API Layer.
+1. **System Overview** — components and governance boundary  
+2. **Document Processing** — full ingest pipeline  
+3. **Question Answering** — retrieval, graph match, answer modes  
+4. **Storage & Modules** — SQLite tables and `app/` package map  
 
-### 3.2 Application API Layer
+---
 
-The single integration boundary for clients (web UI, CLI, automation). Responsibilities include:
+## 4. Document processing pipeline (offline)
 
-- Request validation and error contracts  
-- Orchestration of ingest jobs and query sessions  
-- Correlation IDs for audit linkage  
-- Response serialization (answer cards, job status, health)
+Orchestrated by `process_document()` in `app/pipeline.py`.
 
-### 3.3 Document Ingestion Pipeline
+```
+Upload file
+    → app/ingestion/extractor.py
+        PDF: pdf_extractor + pdf_layout.reconstruct_pdf_layout()
+        DOCX: docx_extractor
+        TXT: txt_extractor
+        Output: normalized text, SHA-256 checksum, warnings
+    → app/structure/ (structure_document)
+        detector, heading_heuristics, hierarchy, chunker
+        section_assignment, chunk_section
+        Output: DocumentSection[], DocumentChunk[]
+    → app/indexing/preparation.py (prepare_document_chunks)
+        tokenizer, normalizer, stopwords, inverted_index, bm25
+    → app/storage/repository.py (save_document_bundle)
+        Persist documents, sections, chunks
+    → [if new document, not duplicate checksum]
+        app/schema/discovery.py → document_schemas
+        app/tree/builder.py → document_trees
+        app/graph/builder.py → document_graphs
+        save_index_bundle → index_terms, chunk_term_frequencies, bm25_statistics
+    → app/audit/logger.py → audit_events (document_processed)
+```
 
-Accepts source files (initial targets: plain text and common office formats), detects format, normalizes encoding and line endings, computes integrity checksums, and registers a **document manifest** in local storage. No semantic interpretation occurs at this stage.
+### 4.1 Ingestion (`app/ingestion/`)
 
-**Code mapping (planned):** `app/ingestion/`
+| Module | Role |
+|--------|------|
+| `extractor.py` | Route by extension; unified `ExtractionResult` |
+| `pdf_extractor.py` | Page text via pypdf |
+| `pdf_layout.py` | Reconstruct inline headings / paragraph breaks (deterministic regex) |
+| `docx_extractor.py` | Paragraphs and tables via python-docx |
+| `txt_extractor.py` | Plain text read |
 
-### 3.4 Structure Extraction Layer
+### 4.2 Structure (`app/structure/`)
 
-Transforms normalized bytes into a **structured document model**: hierarchical sections, headings, paragraphs, tables, and lists, each with stable anchors (e.g., `docId:section:offset`). Structure is rule- and parser-based, not learned.
+| Module | Role |
+|--------|------|
+| `detector.py` | Line-based structure detection |
+| `heading_heuristics.py` | Promote probable headings (PDF/plain) |
+| `hierarchy.py` | Section levels, parent links, line ranges |
+| `chunker.py` | Line-anchored chunks with metadata |
+| `section_assignment.py` | Assign chunks to deepest matching section |
+| `chunk_section.py` | Section-scoped chunk helpers |
 
-**Code mapping (planned):** `app/structure/`
+### 4.3 Semantic tree (`app/tree/`)
 
-### 3.5 Knowledge Preparation Layer
+Built after sections/chunks exist. Stored as JSON in `document_trees`.
 
-Builds **lexical artifacts** from the structured model: inverted indexes, term statistics, span registry entries, and document-level metadata required for retrieval. This layer replaces vector embeddings with explicit, inspectable indexes.
+```
+document
+└── section (title, level, line range)
+    └── paragraph
+        ├── sentence
+        ├── list_item
+        └── table_row
+```
 
-**Code mapping (planned):** `app/indexing/`
+| Module | Role |
+|--------|------|
+| `builder.py` | `build_document_tree(sections, chunks)` |
+| `traversal.py` | `get_section_text()`, `get_section_sentences()`, `iter_nodes()` |
+| `models.py` | `DocumentTree`, `TreeNode` |
 
-### 3.6 Rule-Based Query Interpreter
+Section Q&A uses tree text as **primary extraction source**; chunk overlap is fallback when a section has no body nodes.
 
-Parses user questions into a **query plan**: tokenized terms, phrase constraints, boolean operators (where supported), document filters, and intent hints derived from pattern rules (e.g., “who”, “when”, “list all”). No neural intent classification.
+### 4.4 Schema discovery (`app/schema/`)
 
-**Code mapping (planned):** `app/query/`
+| Module | Role |
+|--------|------|
+| `discovery.py` | Categories from headings; grammar attachment |
+| `normalization.py` | Heading → normalized category names |
+| `grammar_discovery.py` | Ordinal templates (“The first … is …”) |
+| `query_category.py` | Map questions → `architecture`, `design_pattern`, etc. |
+| `registry.py` | Pattern registry per category |
+| `graph_candidates.py` | Triple candidates for graph builder |
 
-### 3.7 Deterministic Retrieval Core
+Persisted in `document_schemas.schema_json`: categories, `DiscoveredPattern`, `GraphCandidate`, discovered sections.
 
-Executes the query plan against prepared indexes using reproducible algorithms: exact term lookup, phrase matching, boolean composition, and rank fusion with fixed tie-breaking. Given identical inputs, rank order is stable.
+### 4.5 Knowledge graph (`app/graph/`)
 
-**Code mapping (planned):** `app/retrieval/`
+| Module | Role |
+|--------|------|
+| `builder.py` | Tree + schema → `KnowledgeGraph` |
+| `extractor.py` | Relation patterns: uses, contains, implements, is_a, … |
+| `matcher.py` | Match question graph to document graph (scored) |
+| `answer_composer.py` | `GRAPH_STRUCTURED` numbered lists |
+| `traversal.py` | Graph walk helpers |
+| `models.py` | `GraphNode`, `GraphEdge`, `KnowledgeGraph` |
 
-### 3.8 Evidence Engine
+Persisted in `document_graphs.graph_json`.
 
-Scores candidate spans using transparent rules: term overlap, phrase coverage, structural proximity, and optional confidence thresholds. Attaches **provenance** (document, anchor, snippet offsets) to every candidate. Rejects or downgrades spans that fail governance checks.
+### 4.6 Indexing (`app/indexing/`)
 
-**Code mapping (planned):** `app/evidence/`
+| Module | Role |
+|--------|------|
+| `tokenizer.py` | Deterministic tokenization |
+| `normalizer.py` | Case folding, stemming rules |
+| `stopwords.py` | Filter list |
+| `inverted_index.py` | Term → chunk postings |
+| `bm25.py` | Corpus statistics, scoring |
+| `preparation.py` | Build index bundle per document |
 
-### 3.9 Answer Card Composer
+---
 
-Assembles the final **answer card**: ordered cited excerpts, source references, match metadata, and a concise structured summary (template-driven, not generated). Returns the card to the API layer for the client.
+## 5. Question answering pipeline (online)
 
-**Code mapping (planned):** `app/evidence/` (composition) with API response shaping at the boundary.
+Orchestrated by `ask_document()` in `app/qa.py`.
 
-### 3.10 Local Storage Layer
+### 5.1 High-level flow
 
-Persists all durable artifacts on disk:
+```
+Question
+  → app/query/interpreter.py (QueryIntent)
+  → app/question_graph/builder.py (symbolic query graph)
+  → load document_schema, document_tree, knowledge_graph
+  → app/graph/matcher.py (GraphMatch[] — trace + optional answer)
+  → if relationship question + score ≥ threshold → GRAPH_STRUCTURED
+  → else if section retrieval triggered:
+        app/retrieval/section_* + app/qa_context.py (section answer context)
+        → STRUCTURED_EXTRACTIVE or EVIDENCE_ONLY
+  → else BM25 chunk search (app/retrieval/searcher.py)
+        → compose_answer_package → evidence cards
+        → optional structured extraction (grammars, patterns)
+  → DocumentQAResult + audit_events (question_asked)
+```
 
-| Store | Contents |
+### 5.2 Query interpreter (`app/query/`)
+
+| Module | Role |
+|--------|------|
+| `interpreter.py` | `interpret_query()` → `QueryIntent` |
+| `rules.py` | Intent patterns: DEFINITION_LOOKUP, WHERE_MENTIONED, LIST_REQUEST, REQUIREMENT_REFERENCE, … |
+| `models.py` | `QueryIntent` dataclass |
+
+`build_retrieval_query()` shapes terms for BM25.
+
+### 5.3 Question graph (`app/question_graph/`)
+
+| Module | Role |
+|--------|------|
+| `builder.py` | `build_question_graph()` — seed entity, relation, category |
+| `intent_mapper.py` | Intent → graph seeds |
+| `models.py` | `QuestionGraph`, nodes, edges |
+
+Examples:
+
+- `What does Enterprise search stack use?` → entity + `uses` relation  
+- `what are different architectures mentioned?` → `mentions` + category `architecture`
+
+### 5.4 Retrieval (`app/retrieval/`)
+
+| Strategy | When | Module |
+|----------|------|--------|
+| `SECTION_LEVEL` | List/enumeration triggers, section title overlap | `section_searcher.py`, `section_trigger.py`, `section_boost.py` |
+| `BM25_CHUNK` | Default / fallback | `searcher.py`, `scorer.py` |
+
+Section path collects chunks inside best section (cap ~20), builds unified `AnswerContext` in `app/qa_context.py`.
+
+### 5.5 Evidence & answers (`app/evidence/`)
+
+| Module | Role |
+|--------|------|
+| `composer.py` | `compose_answer_package()` — cards from search results |
+| `structured_composer.py` | List/ordinal structured answers |
+| `extraction_runtime.py` | Execute discovered grammars (regex) |
+| `extraction_validator.py` | Category boundary / contamination filter |
+| `pattern_extractor.py` | Architecture phrases, bullets, ordinals |
+| `symbolic_inference.py` | Deterministic follow-on entity rules |
+| `context.py` | Snippet expansion |
+| `highlighter.py`, `selector.py` | Card text and ranking helpers |
+| `models.py` | `EvidenceCard`, answer mode constants |
+
+### 5.6 Answer mode decision (priority)
+
+| Priority | Mode | Condition |
+|----------|------|-----------|
+| 1 | `GRAPH_STRUCTURED` | Relationship-style question; `should_use_graph_answer()`; graph cards exist; match score ≥ ~8.0 |
+| 2 | `STRUCTURED_EXTRACTIVE` | Section/tree path; grammar or pattern extraction succeeds |
+| 3 | `EVIDENCE_ONLY` | Cards returned; no confident structured/graph list |
+| 4 | `NO_EVIDENCE` | No reliable spans |
+
+Enumeration questions (`architectures mentioned`, `design patterns`) **skip** graph composition and use section + grammar path even when a graph exists.
+
+Final package selection in `ask_document()`:
+
+```text
+if graph_package: use graph
+elif section_package: use section
+else: BM25 package + _apply_structured_answer()
+```
+
+### 5.7 Unified section context (`app/qa_context.py`)
+
+| Function | Role |
+|----------|------|
+| `resolve_document_tree()` | Load or rebuild tree for Q&A |
+| `build_section_answer_context()` | Single `extraction_text` from tree |
+| `finalize_answer_context()` | One bundled search result, grammar run, cards |
+| `context_debug_trace()` | `extraction_source=DOCUMENT_TREE`, section id, etc. |
+
+Fixes divergence between narrow chunk slices and expanded evidence context.
+
+---
+
+## 6. Persistence (SQLite)
+
+Schema defined in `app/storage/database.py`. Default path: `data/tracedoc.db`.
+
+| Table | Contents |
 |-------|----------|
-| Raw uploads | Original files under `data/uploads/` |
-| Structured artifacts | Parsed document models |
-| Indexes | Lexical indexes and span registry |
-| Audit log | Append-only decision and request events |
-| Answer cache | Optional memoization keyed by (index version, query plan) |
+| `documents` | File metadata, full text, checksum (unique), warnings JSON |
+| `sections` | Section id, title, level, line range, parent |
+| `chunks` | Chunk id, text, type, lines, section link |
+| `index_terms` | Vocabulary + document frequency |
+| `chunk_term_frequencies` | Term positions per chunk |
+| `bm25_statistics` | avgdl, idf/df JSON, chunk lengths, field weights |
+| `document_schemas` | `schema_json` per document |
+| `document_trees` | `tree_json` per document |
+| `document_graphs` | `graph_json` per document |
+| `audit_events` | Append-only: process, question, failures |
 
-**Code mapping (planned):** `app/storage/`, `data/index/`
+**Files on disk:** `data/uploads/` (raw uploads), `data/index/` (optional index artifacts).
 
-### 3.11 Governance / Constraints
+**Repository API:** `app/storage/repository.py` — save/load bundles, `clear_local_data()` for UI reset.
 
-A cross-cutting policy envelope (shown as a boundary in the diagram) that defines **non-negotiable exclusions**:
+---
 
-- No large language models or generative AI  
-- No machine-learning rankers or classifiers  
-- No embedding indexes or approximate nearest-neighbor search  
-- No external API calls in core paths  
+## 7. Cross-cutting concerns
 
-Audit events record ingest, retrieval, and evidence decisions for later inspection.
+### 7.1 Audit (`app/audit/`)
 
-**Code mapping (planned):** `app/audit/`, configuration in `config/`
+`log_audit_event()` — event types include `document_processed`, `duplicate_document_detected`, `question_asked`, `question_failed`, `document_processing_failed`.
 
-### 3.12 Future Enterprise Upgrade Path
+### 7.2 Evaluation (`app/eval/`, `eval/`)
 
-Explicitly **out of scope for v1**, documented to guide extension without compromising the deterministic core:
+| Artifact | Role |
+|----------|------|
+| `eval/benchmark_docs/symbolic_architecture_doc.txt` | Fixed benchmark document |
+| `eval/questions.yaml` | Expected modes and substring checks |
+| `eval/run_eval.py` | CLI; temp DB; exit code 1 on failure |
+| `app/eval/runner.py` | `run_benchmark()`, metrics |
 
-- SSO / role-based access control  
+### 7.3 UI (`app/main.py`)
+
+Streamlit: upload/process summary, capabilities panel, suggested questions, answer sections A/B/C, collapsed debug trace.
+
+### 7.4 CI (`.github/workflows/ci.yml`)
+
+Python 3.11 & 3.12: pytest, smoke test, eval benchmark.
+
+---
+
+## 8. Module map (`app/`)
+
+```
+app/
+├── main.py                 Streamlit UI
+├── pipeline.py             process_document()
+├── qa.py                   ask_document(), ask_all_documents()
+├── qa_context.py           Section answer context (tree-backed)
+├── ingestion/              PDF, DOCX, TXT extractors
+├── structure/              Sections, chunks, headings
+├── tree/                   Semantic document tree
+├── schema/                 Category & grammar discovery
+├── graph/                  Knowledge graph build, match, answer
+├── question_graph/         Symbolic query graph from question
+├── indexing/               Tokenizer, inverted index, BM25
+├── retrieval/              Section + BM25 search
+├── evidence/               Cards, structured extractive, validation
+├── query/                  Intent interpreter
+├── storage/                SQLite schema + repository
+├── audit/                  Event logging
+└── eval/                   Benchmark runner library
+```
+
+**Tests:** `tests/` (281+ cases). **Samples:** `samples/`. **Scripts:** `scripts/smoke_test.py`.
+
+---
+
+## 9. Deployment view (v0.1.0)
+
+| Attribute | Value |
+|-----------|--------|
+| Topology | Single Python process (Streamlit or script) |
+| Network | None required for core QA |
+| Database | Local SQLite per machine |
+| Hosting | Streamlit Cloud, LAN (`0.0.0.0`), VM, or tunnel — see README |
+| Scale | Single-user demo; not multi-tenant |
+
+---
+
+## 10. Quality attributes
+
+| Attribute | How TraceDoc achieves it |
+|-----------|---------------------------|
+| Explainability | Mode label, evidence cards, debug trace, audit JSON |
+| Privacy | Data stays on host unless operator copies files |
+| Testability | Unit tests + smoke + eval benchmark in CI |
+| Maintainability | Pipeline stages map 1:1 to packages |
+
+---
+
+## 11. Limitations (v0.1.0)
+
+- Lexical retrieval only — no synonyms or semantic similarity  
+- Heading-dependent sections and lists — PDF layout heuristics may miss boundaries  
+- Graph answers require entities/edges present in built graph  
+- No generative summarization or multi-hop reasoning  
+- Duplicate checksum skips re-indexing (schema/tree/graph not rebuilt)  
+- Multi-document QA limited to `ask_all_documents()` helper  
+- Streamlit Cloud: ephemeral disk — re-upload documents per session  
+
+---
+
+## 12. Future enterprise path (documented, not implemented)
+
+Dashed in diagrams and out of scope for v0.1.0:
+
+- SSO / RBAC  
 - Multi-tenant storage partitioning  
-- Central policy service (retention, redaction rules)  
-- Enterprise connectors (SharePoint, Confluence, etc.)  
-- Observability export (metrics, traces) to corporate platforms  
+- Central policy service (retention, redaction)  
+- Connectors (SharePoint, Confluence)  
+- Observability export to corporate platforms  
 
-Integration points are shown as dashed hooks from the API layer; v1 implementations must not require these modules.
-
----
-
-## 4. Data flows
-
-### 4.1 Document preparation (offline)
-
-```
-Upload → Ingestion → Structure Extraction → Knowledge Preparation → Local Storage
-```
-
-Triggered by user upload or batch ingest API. Produces versioned index artifacts consumed by retrieval.
-
-### 4.2 Question answering (online)
-
-```
-Question → Query Interpreter → Retrieval Core ← Local Storage (indexes)
-         → Evidence Engine → Answer Card Composer → API → UI
-```
-
-Read-heavy on indexes; write append-only audit records. Does not mutate source documents.
+The deterministic core (ingest → index → symbolic QA) should remain unchanged; enterprise features wrap the API boundary.
 
 ---
 
-## 5. Deployment view
+## 13. Diagram export checklist
 
-| Attribute | v1 target |
-|-----------|-----------|
-| Topology | Single process or small set of co-located modules on one laptop |
-| Network | None required for core operation |
-| Dependencies | Python standard library plus explicit document parsers (added per implementation step) |
-| Data directories | `data/uploads/`, `data/index/` |
+1. Open `docs/architecture.drawio` in diagrams.net.  
+2. Export each of the **4 pages** to `docs/images/` (see [`images/README.md`](images/README.md)).  
+3. Optionally embed in README:  
+   `![Overview](docs/images/architecture-overview.png)`
 
 ---
 
-## 6. Quality attributes
+## 14. Implementation status
 
-- **Reproducibility:** Retrieval and evidence scores are pure functions of inputs and index version.  
-- **Explainability:** Every answer card line traces to a source anchor.  
-- **Privacy:** Documents never leave the machine unless the operator copies them.  
-- **Maintainability:** Pipeline stages are independently testable; see `tests/`.  
+| Area | Status |
+|------|--------|
+| Ingestion → structure → index | ✅ v0.1.0 |
+| Semantic tree | ✅ v0.1.0 |
+| Schema + grammar discovery | ✅ v0.1.0 |
+| Knowledge graph + matcher | ✅ v0.1.0 |
+| Question graph | ✅ v0.1.0 |
+| GRAPH / STRUCTURED / EVIDENCE / NO_EVIDENCE modes | ✅ v0.1.0 |
+| Streamlit demo UI | ✅ v0.1.0 |
+| Eval benchmark + GitHub Actions CI | ✅ v0.1.0 |
+| Enterprise envelope | 📋 Documented only |
 
----
-
-## 7. Non-goals (v1)
-
-- Semantic search via embeddings or transformers  
-- Automatic summarization or “chatty” responses  
-- Multi-user collaboration or cloud sync  
-- Real-time collaborative editing  
-
----
-
-## 8. Implementation status
-
-Architecture baseline is complete. Application modules under `app/` remain empty placeholders; implementation proceeds step-by-step per the project plan. Update this document when component contracts stabilize.
+Release tag: **v0.1.0** — see [`CHANGELOG.md`](../CHANGELOG.md).
