@@ -180,6 +180,38 @@ results = process_documents(["doc1.txt", "doc2.pdf"], db_path="data/tracedoc.db"
 python -m pytest
 ```
 
+## Step 8: Evidence engine and answer cards
+
+The Evidence Engine and Answer Card Composer turn BM25 search hits into **citation-first, evidence-only** responses. TraceDoc does not generate ChatGPT-style prose; it returns exact snippets from uploaded documents with line anchors and match explanations.
+
+**Features:**
+- **Evidence selection** — filter by score, deduplicate normalized snippets, keep top cards
+- **Snippets** — full chunk text, trimmed around the first matched term when over 700 characters
+- **Highlighting** — `[[term]]` markers with original casing preserved
+- **Confidence** — `HIGH` / `MEDIUM` / `LOW` from BM25 score and matched-term count
+- **Citations** — `document | section: … | lines start-end`
+
+This design prevents hallucination: every visible statement traces to a retrieved chunk. No AI, LLM, or embeddings are used.
+
+**Usage (Python):**
+
+```python
+from app.evidence import compose_answer_package
+from app.retrieval import search_chunks
+
+results = search_chunks("HPC6 memory", index, bm25_stats, top_k=5)
+package = compose_answer_package("What are the HPC6 memory requirements?", results)
+
+for card in package.cards:
+    print(card.confidence, card.citation, card.snippet)
+```
+
+**Run tests:**
+
+```bash
+python -m pytest
+```
+
 ## Layout
 
 - `app/` — ingestion, structure, indexing, query, retrieval, evidence, audit, storage
