@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 from app.evidence.models import EvidenceCard
+from app.evidence.pattern_extractor import extract_enumerated_phrases
 
 _PLURAL_TARGETS = (
     "architectures",
@@ -17,13 +18,6 @@ _PLURAL_TARGETS = (
     "categories",
     "families",
     "models",
-)
-
-_ARCHITECTURE_PHRASES: tuple[tuple[str, str], ...] = (
-    ("enterprise search stack", "Enterprise search stack"),
-    ("classic qa pipeline", "Classic QA pipeline"),
-    ("ontology and knowledge-graph stack", "Ontology and knowledge-graph stack"),
-    ("traceability and citation graph", "Traceability and citation graph"),
 )
 
 _LINEAGE_PHRASES: tuple[tuple[str, str], ...] = (
@@ -96,12 +90,7 @@ def _is_valid_list_item(item: str, evidence_lower: str) -> bool:
 
 
 def _compose_architecture_answer(evidence_text: str) -> str | None:
-    evidence_lower = evidence_text.lower()
-    found: list[str] = []
-    for phrase, label in _ARCHITECTURE_PHRASES:
-        if phrase in evidence_lower:
-            found.append(label)
-
+    found = extract_enumerated_phrases(evidence_text, "architecture")
     if not found:
         return None
 

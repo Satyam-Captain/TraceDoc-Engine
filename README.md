@@ -129,6 +129,16 @@ PDF text extraction often loses markdown-style structure, so headings like *Exis
 
 Sample: `samples/pdf_style_document.txt`
 
+## Step 18: Generic deterministic pattern extraction
+
+Structured architecture answers no longer rely on a hardcoded list of family names. `app/evidence/pattern_extractor.py` applies **symbolic, rule-based extraction** to evidence text (for example `The most common … architecture is X`, `A second architecture is X`) and normalizes phrases for display.
+
+- **No ML/LLM/embeddings** — regex rules, validation heuristics, and category-specific extractors only
+- **Extensible categories** — `architecture` is implemented; `capability`, `pattern`, and `technology` can add rules in the same registry
+- **Traceability** — each extracted phrase can retain its source sentence for debugging and future UI
+
+Re-process documents after upgrading if stored answers were built from older hardcoded matching.
+
 ## Step 17: PDF layout reconstruction
 
 pypdf and similar extractors flatten page text into long paragraphs, so headings such as *Existing architectures* can appear inline (`...mechanism. Existing architectures The most common...`) instead of on their own line. Section detection then fails because heading heuristics never see isolated lines.

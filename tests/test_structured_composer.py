@@ -45,7 +45,8 @@ def test_list_enumeration_question_detection() -> None:
 def test_architecture_answer_includes_only_evidence_phrases() -> None:
     cards = [
         _card(
-            "Options include the enterprise search stack and the classic QA pipeline."
+            "The most common pre-generative architecture is the enterprise search stack.\n"
+            "A second architecture is the classic QA pipeline."
         ),
     ]
     answer = compose_structured_answer("different architectures?", cards)
@@ -59,16 +60,18 @@ def test_architecture_answer_includes_only_evidence_phrases() -> None:
 
 def test_architecture_answer_all_four_when_present() -> None:
     snippet = (
-        "The enterprise search stack, classic QA pipeline, "
-        "ontology and knowledge-graph stack, and traceability and citation graph."
+        "The most common pre-generative architecture is the enterprise search stack.\n"
+        "A second architecture is the classic QA pipeline.\n"
+        "A third architecture is the ontology and knowledge-graph stack.\n"
+        "A fourth architecture is the traceability and citation graph."
     )
     answer = compose_structured_answer("what are the architectures", [_card(snippet)])
 
     assert answer is not None
-    assert "Enterprise search stack" in answer
-    assert "Classic QA pipeline" in answer
-    assert "Ontology and knowledge-graph stack" in answer
-    assert "Traceability and citation graph" in answer
+    assert "1. Enterprise search stack" in answer
+    assert "2. Classic QA pipeline" in answer
+    assert "3. Ontology and knowledge-graph stack" in answer
+    assert "4. Traceability and citation graph" in answer
 
 
 def test_unknown_list_question_returns_none() -> None:
@@ -99,10 +102,10 @@ def test_ask_document_structured_extractive_mode(tmp_path: Path) -> None:
     db_path = tmp_path / "tracedoc.db"
     source.write_text(
         "SYSTEM ARCHITECTURES\n\n"
-        "The enterprise search stack supports keyword retrieval.\n"
-        "The classic QA pipeline uses BM25 and evidence cards.\n"
-        "The ontology and knowledge-graph stack links document entities.\n"
-        "The traceability and citation graph stores line citations.\n",
+        "The most common architecture is the enterprise search stack.\n"
+        "A second architecture is the classic QA pipeline.\n"
+        "A third architecture is the ontology and knowledge-graph stack.\n"
+        "A fourth architecture is the traceability and citation graph.\n",
         encoding="utf-8",
     )
     processed = process_document(str(source), db_path=str(db_path))
@@ -154,7 +157,7 @@ def test_architecture_structured_answer_returns_only_present_items(tmp_path: Pat
     db_path = tmp_path / "tracedoc.db"
     source.write_text(
         "# Existing architectures\n\n"
-        "The enterprise search stack is commonly used.\n"
+        "The most common architecture is the enterprise search stack.\n"
         "A second architecture is the classic QA pipeline.\n",
         encoding="utf-8",
     )

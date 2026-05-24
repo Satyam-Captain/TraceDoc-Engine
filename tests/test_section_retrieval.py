@@ -179,7 +179,7 @@ def test_section_retrieval_partial_architectures_only(tmp_path: Path) -> None:
     db_path = tmp_path / "tracedoc.db"
     source.write_text(
         "# Existing architectures\n\n"
-        "The enterprise search stack is common.\n"
+        "The most common architecture is the enterprise search stack.\n"
         "A second architecture is the classic QA pipeline.\n",
         encoding="utf-8",
     )
