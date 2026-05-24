@@ -20,8 +20,9 @@ REAL_PDF_STYLE_SECTION = (
     "The most common pre-generative architecture is the enterprise search stack: "
     "repository connectors ingest content, normalize text, and feed search indexes. "
     "OpenEphyra embodied a modular implementation with question analysis, query generation, "
-    "search, and answer extraction/selection, and the classic QA pipeline is still the "
-    "cleanest conceptual answer for many teaching examples. "
+    "search, and answer extraction/selection. "
+    "If your stakeholder says 'no AI', this pipeline is still the cleanest conceptual answer "
+    "for many teaching examples. "
     "A third architecture is the ontology and knowledge-graph stack. "
     "A fourth architecture is the traceability and citation graph."
 )

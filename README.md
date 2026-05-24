@@ -129,6 +129,18 @@ PDF text extraction often loses markdown-style structure, so headings like *Exis
 
 Sample: `samples/pdf_style_document.txt`
 
+## Step 20: Symbolic relationship inference
+
+When PDF text describes architectures indirectly (for example OpenEphyra as a modular QA implementation, or *this pipeline* in a follow-on sentence), explicit regex extraction is not enough. `app/evidence/symbolic_inference.py` adds **deterministic symbolic rules**:
+
+- **Relationship graph** — registered implications (for example OpenEphyra → Classic QA pipeline)
+- **Co-reference resolution** — backward scan for *this/that pipeline|architecture* without NLP coreference libraries
+- **Merged with explicit patterns** — `pattern_extractor.py` runs symbolic inference after explicit rules, preserves source order, deduplicates
+
+Each `ExtractedPhrase` records `inference_type` (`explicit_pattern` or `symbolic_inference`) and `pattern_name` for debug trace lines such as `inference=open_ephyra_pipeline_inference`.
+
+Still **no LLM, embeddings, or external APIs**.
+
 ## Step 19: Robust deterministic pattern extraction
 
 Architecture structured answers use **sentence segmentation** (`sentence_splitter.py`) and **grammar-style rules** (`pattern_extractor.py`) before composition:

@@ -26,8 +26,9 @@ REAL_SECTION_EVIDENCE = (
     "The most common pre-generative architecture is the enterprise search stack: "
     "repository connectors ingest content, normalize text, and feed search indexes. "
     "OpenEphyra embodied a modular implementation with question analysis, query generation, "
-    "search, and answer extraction/selection, and the classic QA pipeline is still the "
-    "cleanest conceptual answer for many teaching examples. "
+    "search, and answer extraction/selection. "
+    "If your stakeholder says 'no AI', this pipeline is still the cleanest conceptual answer "
+    "for many teaching examples. "
     "A third architecture is the ontology and knowledge-graph stack. "
     "A fourth architecture is the traceability and citation graph."
 )
@@ -74,9 +75,15 @@ def test_third_and_fourth_architecture_patterns() -> None:
     ]
 
 
-def test_classic_qa_from_context_without_second_architecture_sentence() -> None:
+def test_classic_qa_inferred_symbolically_without_literal_phrase() -> None:
     phrases = extract_enumerated_phrases(REAL_SECTION_EVIDENCE, "architecture")
     assert "Classic QA pipeline" in phrases
+    entries = extract_enumerated_phrases_with_trace(REAL_SECTION_EVIDENCE, "architecture")
+    assert any(
+        entry.value == "Classic QA pipeline"
+        and entry.inference_type == "symbolic_inference"
+        for entry in entries
+    )
 
 
 def test_real_section_text_extracts_all_four_families() -> None:

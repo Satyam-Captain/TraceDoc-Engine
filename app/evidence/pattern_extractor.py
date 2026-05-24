@@ -82,6 +82,10 @@ _CLASSIC_QA_CONTEXT_MARKERS = (
 )
 
 
+INFERENCE_EXPLICIT = "explicit_pattern"
+INFERENCE_SYMBOLIC = "symbolic_inference"
+
+
 @dataclass(frozen=True)
 class ExtractedPhrase:
     """A phrase extracted from evidence with trace metadata."""
@@ -89,6 +93,7 @@ class ExtractedPhrase:
     value: str
     source_sentence: str
     pattern_name: str = ""
+    inference_type: str = INFERENCE_EXPLICIT
 
 
 def clean_extracted_phrase(phrase: str) -> str:
@@ -183,11 +188,13 @@ def _add_candidate(
     source_sentence: str,
     pattern_name: str,
     source_lower: str,
+    require_in_source: bool = True,
+    inference_type: str = INFERENCE_EXPLICIT,
 ) -> None:
     cleaned = clean_extracted_phrase(value)
     if not _is_valid_phrase(cleaned):
         return
-    if not _phrase_in_source(cleaned, source_lower):
+    if require_in_source and not _phrase_in_source(cleaned, source_lower):
         return
     candidates.append(
         (
@@ -196,6 +203,7 @@ def _add_candidate(
                 value=cleaned,
                 source_sentence=source_sentence.strip(),
                 pattern_name=pattern_name,
+                inference_type=inference_type,
             ),
         )
     )
@@ -261,9 +269,11 @@ def _dedupe_by_position(candidates: list[tuple[int, ExtractedPhrase]]) -> list[E
     return unique
 
 
-def _extract_architecture_phrases(text: str) -> list[ExtractedPhrase]:
-    source_lower = text.lower()
-    sentences = split_sentences(text)
+def _extract_explicit_architecture_phrases(
+    text: str,
+    sentences: list[str],
+    source_lower: str,
+) -> list[ExtractedPhrase]:
     candidates: list[tuple[int, ExtractedPhrase]] = []
 
     for match in _MOST_COMMON_ARCHITECTURE.finditer(text):
@@ -296,6 +306,36 @@ def _extract_architecture_phrases(text: str) -> list[ExtractedPhrase]:
     _extract_noun_phrase_fallback(text, source_lower, candidates, sentences)
 
     return _dedupe_by_position(candidates)
+
+
+def _merge_explicit_and_symbolic(
+    text: str,
+    explicit: list[ExtractedPhrase],
+    symbolic: list[ExtractedPhrase],
+) -> list[ExtractedPhrase]:
+    merged: list[tuple[int, ExtractedPhrase]] = []
+    for entry in explicit:
+        position = text.find(entry.source_sentence)
+        merged.append((position if position >= 0 else len(merged), entry))
+    for entry in symbolic:
+        position = text.find(entry.source_sentence)
+        merged.append((position if position >= 0 else len(merged) + 1000, entry))
+    return _dedupe_by_position(merged)
+
+
+def _extract_architecture_phrases(text: str) -> list[ExtractedPhrase]:
+    from app.evidence.symbolic_inference import infer_symbolic_relationships
+
+    source_lower = text.lower()
+    sentences = split_sentences(text)
+    explicit = _extract_explicit_architecture_phrases(text, sentences, source_lower)
+    symbolic = infer_symbolic_relationships(
+        sentences,
+        "architecture",
+        full_text=text,
+        existing_values=frozenset(entry.value.lower() for entry in explicit),
+    )
+    return _merge_explicit_and_symbolic(text, explicit, symbolic)
 
 
 _CATEGORY_EXTRACTORS: dict[str, Callable[[str], list[ExtractedPhrase]]] = {

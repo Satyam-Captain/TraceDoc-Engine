@@ -112,12 +112,21 @@ def _compose_architecture_answer(evidence_text: str) -> str | None:
 
 
 def architecture_extraction_trace(evidence_text: str) -> list[str]:
-    """Debug lines describing extracted architecture phrases."""
+    """Debug lines describing extracted and inferred architecture phrases."""
     entries = extract_enumerated_phrases_with_trace(evidence_text, "architecture")
-    return [
-        f"extracted={entry.value} pattern={entry.pattern_name} source={entry.source_sentence[:120]}"
-        for entry in entries
-    ]
+    lines: list[str] = []
+    for entry in entries:
+        if entry.inference_type == "symbolic_inference":
+            lines.append(
+                f"extracted={entry.value} inference={entry.pattern_name} "
+                f"source={entry.source_sentence[:120]}"
+            )
+        else:
+            lines.append(
+                f"extracted={entry.value} pattern={entry.pattern_name} "
+                f"inference=explicit_pattern source={entry.source_sentence[:120]}"
+            )
+    return lines
 
 
 def _compose_lineage_answer(evidence_text: str) -> str | None:
