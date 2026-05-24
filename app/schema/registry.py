@@ -131,6 +131,16 @@ def primary_grammar_for_category(
 ) -> DiscoveredPattern | None:
     """Return the highest-confidence grammar for a category, if any."""
     patterns = registry_patterns_for_category(schema, category)
+    if not patterns and category == "design_pattern":
+        patterns = [
+            pattern
+            for pattern in schema.discovered_patterns
+            if pattern.pattern_name in {"ordinal_design_pattern", "ordinal_pattern"}
+            and (
+                pattern.category == "design_pattern"
+                or "design pattern" in " ".join(pattern.type_phrases).lower()
+            )
+        ]
     if not patterns:
         return None
     return max(patterns, key=lambda item: item.confidence_score)

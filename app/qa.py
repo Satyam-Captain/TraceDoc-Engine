@@ -37,10 +37,8 @@ from app.structure.hierarchy import infer_section_ranges
 from app.structure.models import DocumentChunk, DocumentSection
 from app.structure.section_assignment import reassign_chunk_sections
 from app.retrieval.models import SearchResult
-from app.schema.discovery import (
-    format_category_normalization_trace,
-    match_question_to_schema_category,
-)
+from app.schema.discovery import format_category_normalization_trace, match_question_to_schema_category
+from app.schema.query_category import resolve_query_target_category
 from app.schema.registry import (
     build_pattern_registry,
     primary_grammar_for_category,
@@ -455,12 +453,13 @@ def ask_document(
             debug_trace.append(
                 f"graph_candidates_count={len(document_schema.graph_candidates)}"
             )
+            target_category = resolve_query_target_category(question, document_schema)
+            if target_category:
+                debug_trace.append(f"target_category={target_category}")
             matched_schema_category = match_question_to_schema_category(
                 question, document_schema
             )
             if matched_schema_category is not None:
-                target_category = matched_schema_category.normalized_name
-                debug_trace.append(f"target_category={target_category}")
                 debug_trace.append(
                     f"schema_category_match={matched_schema_category.normalized_name}"
                 )
@@ -509,6 +508,26 @@ def ask_document(
                     debug_trace.append("fallback_reason=no_relevant_section")
                 else:
                     best_section = ranked_sections[0]
+                    if document_schema is not None:
+                        target_category = resolve_query_target_category(
+                            question,
+                            document_schema,
+                            selected_section_title=best_section.title,
+                        )
+                        matched_schema_category = match_question_to_schema_category(
+                            question,
+                            document_schema,
+                            selected_section_title=best_section.title,
+                        )
+                        if target_category:
+                            debug_trace.append(
+                                f"target_category={target_category}"
+                            )
+                        if matched_schema_category is not None:
+                            debug_trace.append(
+                                "schema_category_match="
+                                f"{matched_schema_category.normalized_name}"
+                            )
                     debug_trace.append(f"selected_section={best_section.title}")
                     debug_trace.append(
                         "selected_section_range="
@@ -556,8 +575,13 @@ def ask_document(
                                     filter_text_to_category_sentences,
                                 )
 
+                                from app.structure.chunk_section import (
+                                    clip_chunk_text_to_section,
+                                )
+
                                 grammar_text = "\n".join(
-                                    chunk.text for chunk in section_chunks
+                                    clip_chunk_text_to_section(chunk, best_section)
+                                    for chunk in section_chunks
                                 )
                                 scoped_by_category = {
                                     target_category: filter_text_to_category_sentences(
@@ -637,12 +661,11 @@ def ask_document(
             debug_trace.append("using_bm25_fallback=False")
 
         debug_trace.append(f"retrieval_strategy={retrieval_strategy}")
-        if target_category is None:
-            from app.schema.normalization import extract_candidate_category
-
-            inferred = extract_candidate_category(question)
-            if inferred:
-                target_category = inferred
+        if target_category is None and document_schema is not None:
+            target_category = resolve_query_target_category(
+                question, document_schema
+            )
+            if target_category:
                 debug_trace.append(f"target_category={target_category}")
 
         package = _apply_structured_answer(

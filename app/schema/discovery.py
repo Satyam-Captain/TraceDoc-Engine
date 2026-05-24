@@ -179,17 +179,54 @@ def _merge_categories(
     return list(merged.values())
 
 
+def _ensure_design_pattern_category(
+    categories: list[DiscoveredCategory],
+    sections: list[DocumentSection],
+    patterns: list[DiscoveredPattern],
+) -> None:
+    """Promote design-pattern sections/grammars out of generic pattern."""
+    for section in sections:
+        if extract_candidate_category(section.title) != "design_pattern":
+            continue
+        if any(item.normalized_name == "design_pattern" for item in categories):
+            break
+        categories.append(
+            DiscoveredCategory(
+                name="design pattern",
+                normalized_name="design_pattern",
+                source_section=section.title,
+                confidence_score=0.95,
+            )
+        )
+        break
+
+    for pattern in patterns:
+        type_text = " ".join(pattern.type_phrases).lower()
+        if pattern.category != "pattern":
+            continue
+        if "design pattern" not in type_text and "critical design" not in type_text:
+            continue
+        pattern.category = "design_pattern"
+        if pattern.pattern_name == "ordinal_pattern":
+            pattern.pattern_name = "ordinal_design_pattern"
+
+
 def discover_document_schema(
     document_id: int,
     sections: list[DocumentSection],
     chunks: list[DocumentChunk],
 ) -> DocumentSchema:
     """Infer semantic categories, extraction styles, and graph candidates."""
-    categories = _merge_categories(
-        _discover_categories_from_sections(sections),
-        _discover_categories_from_chunk_headings(chunks),
+    from app.schema.query_category import filter_plausible_categories
+
+    categories = filter_plausible_categories(
+        _merge_categories(
+            _discover_categories_from_sections(sections),
+            _discover_categories_from_chunk_headings(chunks),
+        )
     )
     patterns = _discover_patterns_from_chunks(sections, chunks, categories)
+    _ensure_design_pattern_category(categories, sections, patterns)
     _attach_patterns_to_categories(categories, patterns)
     graph_candidates = discover_graph_candidates(chunks)
 
@@ -205,45 +242,17 @@ def discover_document_schema(
 def match_question_to_schema_category(
     question: str,
     schema: DocumentSchema,
+    *,
+    selected_section_title: str = "",
 ) -> DiscoveredCategory | None:
     """Route a question to a discovered category when phrasing matches."""
-    lower = question.lower()
-    question_category = extract_candidate_category(question)
-    if question_category == "pattern" and (
-        "design pattern" in lower or "design patterns" in lower
-    ):
-        question_category = "design_pattern"
+    from app.schema.query_category import match_question_to_schema_category as _match
 
-    if question_category is not None:
-        for category in schema.categories:
-            if category.normalized_name == question_category:
-                return category
-        if question_category == "design_pattern":
-            for category in schema.categories:
-                if category.normalized_name == "design_pattern":
-                    return category
-
-    best: DiscoveredCategory | None = None
-    best_score = 0.0
-
-    for category in schema.categories:
-        label = category.normalized_name.replace("_", " ")
-        plural = label + "s" if not label.endswith("s") else label
-        matched = False
-        if label in lower or plural in lower:
-            matched = True
-        if "design" in lower and "pattern" in lower and category.normalized_name == "design_pattern":
-            matched = True
-        if category.source_section.lower() in lower:
-            matched = True
-        if not matched:
-            continue
-        score = category.confidence_score + (0.1 * len(label))
-        if score > best_score:
-            best = category
-            best_score = score
-
-    return best
+    return _match(
+        question,
+        schema,
+        selected_section_title=selected_section_title,
+    )
 
 
 def format_category_normalization_trace(categories: list[DiscoveredCategory]) -> list[str]:

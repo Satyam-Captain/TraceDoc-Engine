@@ -33,7 +33,7 @@ STABILITY_DOCUMENT = (
 )
 
 ARCHITECTURE_QUESTION = "what are different architectures mentioned in the pdf?"
-DESIGN_PATTERN_QUESTION = "what are different design patterns mentioned in the pdf?"
+DESIGN_PATTERN_QUESTION = "what are different design pattern mentioned in the pdf?"
 
 ARCHITECTURE_ENTITIES = (
     "Enterprise search stack",

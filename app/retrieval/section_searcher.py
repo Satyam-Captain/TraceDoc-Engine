@@ -337,20 +337,12 @@ def collect_section_chunks(
     if max_chunks <= 0:
         return []
 
+    from app.structure.chunk_section import chunk_overlaps_section, chunk_within_section
+
     ordered = sorted(chunks, key=lambda item: (item.start_line, item.chunk_id))
-    in_bounds = [
-        chunk
-        for chunk in ordered
-        if section.start_line <= chunk.start_line <= section.end_line
-        and chunk.end_line <= section.end_line
-    ]
+    in_bounds = [chunk for chunk in ordered if chunk_within_section(chunk, section)]
     if in_bounds:
         return in_bounds[:max_chunks]
 
-    # Allow a single chunk that starts in-section even if end_line spills by overlap.
-    started_in_section = [
-        chunk
-        for chunk in ordered
-        if section.start_line <= chunk.start_line <= section.end_line
-    ]
-    return started_in_section[:max_chunks]
+    overlapping = [chunk for chunk in ordered if chunk_overlaps_section(chunk, section)]
+    return overlapping[:max_chunks]

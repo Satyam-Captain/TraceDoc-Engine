@@ -73,10 +73,18 @@ def type_phrases_for_category(
     category: str,
 ) -> list[str]:
     """Collect discovered type phrases for one category."""
-    from app.schema.registry import registry_patterns_for_category
+    from app.schema.registry import (
+        primary_grammar_for_category,
+        registry_patterns_for_category,
+    )
 
     phrases: list[str] = []
-    for pattern in registry_patterns_for_category(schema, category):
+    patterns = registry_patterns_for_category(schema, category)
+    if not patterns and category == "design_pattern":
+        grammar = primary_grammar_for_category(schema, category)
+        if grammar is not None:
+            patterns = [grammar]
+    for pattern in patterns:
         phrases.extend(pattern.type_phrases)
         if pattern.ordinal_type_phrase:
             phrases.append(pattern.ordinal_type_phrase)
