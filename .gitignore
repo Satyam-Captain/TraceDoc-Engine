@@ -35,6 +35,7 @@ data/index/*
 !data/index/.gitkeep
 data/tracedoc.db
 data/demo_tracedoc.db
+eval/benchmark.db
 # OS
 .DS_Store
 Thumbs.db

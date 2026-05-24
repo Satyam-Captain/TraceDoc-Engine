@@ -98,6 +98,21 @@ Relationship-style questions (e.g. `What does X use?`, `What does X contain?`, `
 
 Enumeration questions (`what architectures are mentioned?`, `what design patterns are mentioned?`) still prefer the **section/tree structured** path.
 
+### Step 27: Evaluation benchmark
+
+A **repeatable, local-only** QA benchmark measures answer quality without manual UI testing:
+
+- **Benchmark document** — `eval/benchmark_docs/symbolic_architecture_doc.txt` (architectures, design patterns, open-source building blocks, relationship examples)
+- **Cases** — `eval/questions.yaml` (question, expected answer mode, required/forbidden substrings, optional section and retrieval strategy)
+- **Runner** — `eval/run_eval.py` creates a temp DB, ingests the benchmark doc, runs every case, prints a PASS/FAIL table, and exits non-zero on failure
+- **Library** — `app/eval/` (`runner.py`, `models.py`, `metrics.py`)
+
+```bash
+python eval/run_eval.py
+```
+
+Metrics reported: total/passed/failed cases, answer-mode accuracy, `expected_contains` pass rate, and `expected_not_contains` violations. No LLM, embeddings, or external APIs.
+
 ## Current capabilities
 
 | Layer | Module | Description |
@@ -350,6 +365,7 @@ tracedoc-engine/
   data/          Local DB and uploads (gitignored contents)
   docs/          Architecture and demo walkthrough
   samples/       Demo TXT documents
+  eval/          Deterministic QA benchmark (docs, questions.yaml, run_eval.py)
   scripts/       smoke_test.py
   tests/         Pytest suite
 ```

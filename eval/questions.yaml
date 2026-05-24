@@ -1,0 +1,66 @@
+document: symbolic_architecture_doc.txt
+
+cases:
+  - id: architecture_list
+    question: what are different architectures mentioned in the pdf?
+    expected_answer_mode: STRUCTURED_EXTRACTIVE
+    expected_retrieval_strategy: SECTION_LEVEL
+    expected_section: Existing architectures
+    expected_contains:
+      - Enterprise search stack
+      - Classic QA pipeline
+      - Ontology and knowledge-graph stack
+      - Traceability and citation graph
+    expected_not_contains:
+      - Multi-granular indexing
+      - repository connectors
+
+  - id: design_pattern_list
+    question: what are different design patterns mentioned in the pdf?
+    expected_answer_mode: STRUCTURED_EXTRACTIVE
+    expected_retrieval_strategy: SECTION_LEVEL
+    expected_section: Design patterns for implementation
+    expected_contains:
+      - Section-aware ingestion
+      - Multi-granular indexing
+      - Deterministic query interpretation
+      - Citation-first answer composition
+      - Symbolic enrichment
+      - Security and audit by design
+    expected_not_contains:
+      - Enterprise search stack
+      - Classic QA pipeline
+
+  - id: graph_uses_relation
+    question: What does Enterprise search stack use?
+    expected_answer_mode: GRAPH_STRUCTURED
+    expected_contains:
+      - repository connectors
+    expected_not_contains:
+      - Multi-granular indexing
+
+  - id: graph_contains_relation
+    question: What does Classic QA pipeline contain?
+    expected_answer_mode: GRAPH_STRUCTURED
+    expected_contains:
+      - question analysis
+      - query generation
+      - search
+      - answer extraction
+    expected_not_contains:
+      - repository connectors
+
+  - id: graph_implements_reverse
+    question: What implements policy?
+    expected_answer_mode: GRAPH_STRUCTURED
+    expected_contains:
+      - Compliance module
+    expected_not_contains:
+      - Enterprise search stack
+
+  - id: building_blocks_evidence
+    question: Where is Apache Tika mentioned?
+    expected_answer_mode: EVIDENCE_ONLY
+    expected_contains:
+      - Apache Tika
+    expected_not_contains: []

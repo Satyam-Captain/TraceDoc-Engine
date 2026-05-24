@@ -1,0 +1,27 @@
+Existing architectures
+
+The most common pre-generative architecture is the enterprise search stack.
+A second architecture is the classic QA pipeline.
+A third architecture is the ontology and knowledge-graph stack.
+A fourth architecture is the traceability and citation graph.
+
+Design patterns for implementation
+
+The first critical design pattern is section-aware ingestion.
+The second pattern is multi-granular indexing.
+The third pattern is deterministic query interpretation.
+The fourth pattern is citation-first answer composition.
+The fifth pattern is symbolic enrichment.
+The sixth pattern is security and audit by design.
+
+Open-source building blocks
+
+For ingestion, the most useful tools are Apache Tika and Apache PDFBox.
+For retrieval, the core building blocks are Lucene, Solr, and OpenSearch.
+For symbolic reasoning, Drools and rule engines are common choices.
+
+Relationship examples
+
+Enterprise search stack uses repository connectors.
+Classic QA pipeline contains question analysis, query generation, search, and answer extraction.
+Compliance module implements policy.
