@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 import streamlit as st
 
@@ -12,7 +17,6 @@ from app.pipeline import process_document
 from app.qa import ask_document
 from app.storage import initialize_database, list_audit_events, list_documents
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = str(PROJECT_ROOT / "data" / "tracedoc.db")
 UPLOAD_DIR = str(PROJECT_ROOT / "data" / "uploads")
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt"}
