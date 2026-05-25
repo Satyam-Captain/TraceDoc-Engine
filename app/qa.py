@@ -43,13 +43,14 @@ from app.retrieval import (
     extract_topic_terms,
     find_relevant_sections,
     score_section_relevance,
-    search_chunks,
+    search_chunks_for_document,
     should_use_section_retrieval,
 )
 from app.structure.hierarchy import infer_section_ranges
 from app.structure.models import DocumentChunk, DocumentSection
 from app.structure.section_assignment import reassign_chunk_sections
 from app.retrieval.models import SearchResult
+from app.retrieval.whoosh_index import get_retrieval_mode
 from app.schema.discovery import format_category_normalization_trace, match_question_to_schema_category
 from app.schema.query_category import resolve_query_target_category
 from app.schema.registry import build_pattern_registry
@@ -657,13 +658,17 @@ def ask_document(
             ):
                 debug_trace.append("fallback_reason=section_path_empty_results")
             debug_trace.append("using_bm25_fallback=True")
+            retrieval_mode = get_retrieval_mode()
+            debug_trace.append(f"retrieval_mode={retrieval_mode}")
             index = load_index_for_document(db_path, document_id)
             bm25_stats = load_bm25_statistics(db_path, document_id)
-            search_results = search_chunks(
+            search_results = search_chunks_for_document(
                 retrieval_query,
                 index,
                 bm25_stats,
+                document_id=document_id,
                 top_k=top_k,
+                retrieval_mode=retrieval_mode,
                 intent_type=query_intent.intent_type,
                 entities=query_intent.entities,
             )
@@ -818,10 +823,11 @@ def ask_all_documents(
             if not statistics:
                 continue
             index = load_index_for_document(db_path, document.id)
-            doc_results = search_chunks(
+            doc_results = search_chunks_for_document(
                 retrieval_query,
                 index,
                 statistics,
+                document_id=document.id,
                 top_k=top_k_per_document,
                 intent_type=query_intent.intent_type,
                 entities=query_intent.entities,

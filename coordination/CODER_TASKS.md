@@ -65,30 +65,30 @@ assert not nlp.pipe_names  # or only entity_ruler after add
 
 ## P2 — Whoosh BM25 retrieval (90 min)
 
-- [ ] **T2.1** Add `app/retrieval/whoosh_index.py`
+- [x] **T2.1** Add `app/retrieval/whoosh_index.py`
 
   - Schema fields: `chunk_id` (ID, stored), `text` (TEXT), `section_id` (TEXT)
   - `build_whoosh_index(document_id, chunks, index_dir: Path) -> Path`
   - Store under `data/index/whoosh/{document_id}/`
   - Use BM25 similarity (Whoosh default)
 
-- [ ] **T2.2** Add `app/retrieval/whoosh_searcher.py`
+- [x] **T2.2** Add `app/retrieval/whoosh_searcher.py`
 
   - `search_whoosh(index_path, query: str, limit: int = 10) -> list[SearchResult]`
   - Map Whoosh hits → existing `SearchResult` model (same as BM25 searcher)
 
-- [ ] **T2.3** Hook `app/pipeline.py` after `prepare_document_chunks`
+- [x] **T2.3** Hook `app/pipeline.py` after `prepare_document_chunks`
 
   - If `TRACEDOC_RETRIEVAL` in (`whoosh`, `hybrid`): build Whoosh index
   - Log warning in `ProcessedDocumentResult.warnings` if index build fails
 
-- [ ] **T2.4** Hook `app/qa.py` / `app/retrieval/searcher.py`
+- [x] **T2.4** Hook `app/qa.py` / `app/retrieval/searcher.py`
 
   - If `whoosh`: use Whoosh only for chunk search
   - If `hybrid`: run both, merge by max score, deterministic tie-break `chunk_id`
   - Section retrieval path **unchanged** (still primary for list questions)
 
-- [ ] **T2.5** Tests `tests/test_whoosh_retrieval.py` with temp dir
+- [x] **T2.5** Tests `tests/test_whoosh_retrieval.py` with temp dir
 
 **Done when:** `TRACEDOC_RETRIEVAL=whoosh pytest tests/test_whoosh_retrieval.py -q` passes
 
@@ -154,7 +154,7 @@ python scripts/preflight_tester.py samples/your_test.pdf
 |------|--------|-------|
 | P0 | done | Branch, requirements-v2, install, spaCy blank, baseline pytest |
 | P1 | done | Docling extractor + TRACEDOC_EXTRACTOR=v2 dispatch + tests |
-| P2 | | |
+| P2 | done | Whoosh index + whoosh/hybrid retrieval with SQLite fallback |
 | P3 | | |
 | P4 | | |
 
