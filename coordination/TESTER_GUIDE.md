@@ -39,13 +39,27 @@ python scripts/preflight_tester.py "C:\path\to\your\document.pdf"
 
 ---
 
+## One-time install (required before v2 UI)
+
+Streamlit uses your project `.venv`. Docling is **not** in `requirements.txt` only — install v2 stack once:
+
+```powershell
+cd c:\Users\satti\Desktop\tracedoc-engine
+.\.venv\Scripts\pip install -r requirements.txt -r requirements-v2.txt
+.\.venv\Scripts\python -c "import docling; print('docling OK')"
+```
+
+If you see `No module named 'docling'`, you skipped this step or Streamlit is not using `.venv`.
+
+**Restart Streamlit** after install (stop terminal Ctrl+C, start again).
+
 ## Environment for UI test (PowerShell)
 
 ```powershell
 $env:TRACEDOC_EXTRACTOR="v2"
 $env:TRACEDOC_RETRIEVAL="hybrid"
 $env:TRACEDOC_EXTRACTION="both"
-streamlit run app/main.py
+.\.venv\Scripts\streamlit run app/main.py
 ```
 
 Clear old DB if you need a clean run (UI or delete `data/tracedoc.db`).
