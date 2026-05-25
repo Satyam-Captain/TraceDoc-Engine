@@ -577,6 +577,7 @@ def ask_document(
                     sections,
                     top_k=3,
                     document_schema=document_schema,
+                    document_name=document.file_name,
                 )
                 if not ranked_sections:
                     debug_trace.append("fallback_reason=no_relevant_section")
@@ -606,6 +607,7 @@ def ask_document(
                         question,
                         best_section,
                         document_schema=document_schema,
+                        document_name=document.file_name,
                     )
                     debug_trace.append(f"selected_section_score={section_score:.2f}")
                     section_chunks = collect_section_chunks(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 from typing import TypeAlias
 
@@ -63,6 +64,10 @@ _WEAK_WORDS = frozenset(
 )
 
 _HEADING_LINE = re.compile(r"^[A-Z][\w\s\-/&(),]{2,79}$")
+
+TITLE_ONLY_LINE_SPAN_MAX = 2
+TITLE_ONLY_SECTION_SCORE_FACTOR = 0.25
+TITLE_ONLY_ALTERNATE_MIN_SCORE = 1.0
 
 
 def _question_terms(question: str) -> set[str]:
@@ -211,6 +216,63 @@ def derive_sections_from_chunks(chunks: list[DocumentChunk]) -> list[StoredSecti
     ]
 
 
+def section_line_span(section: StoredSection) -> int:
+    """Inclusive line span used for title-only section heuristics."""
+    return max(0, section.end_line - section.start_line)
+
+
+def _document_stem_tokens(document_name: str) -> set[str]:
+    stem = Path(document_name).stem
+    tokens: set[str] = set()
+    for part in re.split(r"[\s_\-]+", stem.lower()):
+        tokens.update(_question_terms(part))
+    tokens.update(_question_terms(stem))
+    return {token for token in tokens if token and token not in _WEAK_WORDS}
+
+
+def section_title_matches_document_name(
+    section_title: str,
+    document_name: str,
+) -> bool:
+    """
+    True when a section title strongly overlaps the document file stem.
+
+    Generic rule for cover/title sections that mirror the PDF filename.
+    """
+    title_norm = " ".join(tokenize(section_title.strip().lower()))
+    stem_norm = " ".join(tokenize(Path(document_name).stem.lower()))
+    if not title_norm or not stem_norm:
+        return False
+    if title_norm == stem_norm:
+        return True
+    if title_norm in stem_norm or stem_norm in title_norm:
+        return True
+
+    title_tokens = _question_terms(section_title)
+    doc_tokens = _document_stem_tokens(document_name)
+    if not title_tokens or not doc_tokens:
+        return False
+
+    overlap = title_tokens.intersection(doc_tokens)
+    if not overlap:
+        return False
+    if len(overlap) >= max(2, (len(title_tokens) * 2 + 2) // 3):
+        return True
+    return len(overlap) >= 2 and len(overlap) / len(title_tokens) >= 0.5
+
+
+def is_title_only_trap_section(
+    section: StoredSection,
+    document_name: str | None,
+) -> bool:
+    """True for short sections whose title mirrors the document name."""
+    if not document_name:
+        return False
+    if section_line_span(section) > TITLE_ONLY_LINE_SPAN_MAX:
+        return False
+    return section_title_matches_document_name(section.title, document_name)
+
+
 def _schema_category_boost(
     question: str,
     section: StoredSection,
@@ -259,6 +321,8 @@ def score_section_relevance(
     question: str,
     section: StoredSection,
     document_schema: DocumentSchema | None = None,
+    *,
+    document_name: str | None = None,
 ) -> float:
     """Score a section title against question topic terms (higher is better)."""
     topic_terms = extract_topic_terms(question)
@@ -285,7 +349,34 @@ def score_section_relevance(
             score += 1.0
 
     score += _schema_category_boost(question, section, document_schema)
+
+    if document_name and is_title_only_trap_section(section, document_name):
+        score *= TITLE_ONLY_SECTION_SCORE_FACTOR
+
     return score
+
+
+def _prefer_non_trap_sections(
+    scored: list[tuple[float, StoredSection]],
+    document_name: str | None,
+) -> list[tuple[float, StoredSection]]:
+    """Drop filename title traps when a better non-trap candidate exists."""
+    if not document_name or len(scored) <= 1:
+        return scored
+
+    best_score, best_section = scored[0]
+    if not is_title_only_trap_section(best_section, document_name):
+        return scored
+
+    for alt_score, alt_section in scored[1:]:
+        if is_title_only_trap_section(alt_section, document_name):
+            continue
+        if alt_score >= TITLE_ONLY_ALTERNATE_MIN_SCORE:
+            reordered = [(alt_score, alt_section)] + [
+                item for item in scored if item[1].section_id != alt_section.section_id
+            ]
+            return reordered
+    return scored
 
 
 def find_relevant_sections(
@@ -293,6 +384,8 @@ def find_relevant_sections(
     sections: list[StoredSection],
     top_k: int = 3,
     document_schema: DocumentSchema | None = None,
+    *,
+    document_name: str | None = None,
 ) -> list[StoredSection]:
     """
     Rank sections by lexical overlap between question topic terms and section title.
@@ -305,7 +398,10 @@ def find_relevant_sections(
     scored: list[tuple[float, StoredSection]] = []
     for section in sections:
         score = score_section_relevance(
-            question, section, document_schema=document_schema
+            question,
+            section,
+            document_schema=document_schema,
+            document_name=document_name,
         )
         if score > 0:
             scored.append((score, section))
@@ -320,6 +416,7 @@ def find_relevant_sections(
             item[1].section_id,
         )
     )
+    scored = _prefer_non_trap_sections(scored, document_name)
     return [section for _, section in scored[:top_k]]
 
 

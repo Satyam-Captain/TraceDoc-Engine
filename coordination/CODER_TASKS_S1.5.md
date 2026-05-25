@@ -54,6 +54,6 @@ Reply: `BUILD_DONE slice=S1.5`
 
 | Task | Status | Notes |
 |------|--------|-------|
-| T1.5.1 | | |
-| T1.5.2 | | |
+| T1.5.1 | done | Title-only filename trap penalty in section_searcher |
+| T1.5.2 | done | Suppress title-only tree context; QA BM25 fallback |
 | T1.5.3 | | |
