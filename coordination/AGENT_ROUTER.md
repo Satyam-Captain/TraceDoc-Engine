@@ -174,8 +174,8 @@ Then you only do UI paste + `review Round 1` to architect.
 |-------|-------|------|----------|-----------|
 | S0 | ✅ | ⬜ | — | — |
 | S1 BUILD | ✅ | ⬜ | UI R1 fail | Review done |
-| S1.5 hotfix | ⬜ | ⬜ | ⬜ | ⬜ |
-| S2 | blocked | — | — | — |
+| S1.5 hotfix | ✅ | — | R1b pass | ✅ |
+| S2 Whoosh | ⬜ | ⬜ | after S2 | — |
 | S3 | ⬜ | ⬜ | ⬜ | ⬜ |
 | S4 | ⬜ | ⬜ | ⬜ | ⬜ |
 
