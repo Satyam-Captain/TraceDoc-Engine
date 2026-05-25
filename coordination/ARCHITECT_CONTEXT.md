@@ -132,8 +132,8 @@ coordination/TESTER_GUIDE.md              when to test
 | Coordination docs | Created |
 | P1 Docling | **DONE** (BUILD S1) |
 | S1.5 Section/title trap fix | **DONE** — 286 tests |
-| P2 Whoosh | **DONE** (e11a350) — TEST Round 2 + re-process docs |
-| P3 EntityRuler | **NOT STARTED** |
+| P2 Whoosh | **DONE** — Round 2 PASS |
+| P3 EntityRuler | **UNBLOCKED** — start S3 |
 | User Round 1 UI | **FAIL** (stale index) |
 | User Round 1b | **PASS** — 3/4 strong, 1 partial |
 
