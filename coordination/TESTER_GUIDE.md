@@ -71,9 +71,25 @@ python scripts/preflight_tester.py "C:\path\to\your\document.pdf"
 
 ---
 
-## Streamlit UI
+## Streamlit UI (single URL — v1 / v2 toggle)
 
-With production env set:
+The sidebar **Engine stack → Version** radio sets flags for this process (no second port required).
+
+```bash
+cd /c/Users/satti/Desktop/tracedoc-engine
+source .venv/Scripts/activate
+pip install -r requirements.txt -r requirements-v2.txt
+streamlit run app/main.py
+```
+
+- **v1 — Classic** → pypdf, SQLite BM25, grammar  
+- **v2 — Full stack** → Docling, hybrid Whoosh, grammar + EntityRuler debug  
+
+Re-process documents after switching version (or use **Clear all local data**).
+
+Optional: still run two ports with manual `export` if you want side-by-side browser windows.
+
+Legacy manual env (overridden by sidebar on each run):
 
 ```powershell
 .\.venv\Scripts\streamlit run app/main.py
