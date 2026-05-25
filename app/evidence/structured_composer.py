@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from app.evidence.entity_ruler import append_entity_ruler_debug
 from app.evidence.extraction_runtime import (
     GrammarExecutionResult,
     execute_discovered_grammar_with_result,
@@ -471,6 +472,9 @@ def compose_structured_answer_from_context(
     if not context.extraction_text.strip():
         context.structured_extraction_failed_reason = "empty_extraction_text"
         return None
+
+    append_entity_ruler_debug(context.debug_trace, context.extraction_text)
+
     if not _should_attempt_structured_answer(context.question):
         context.structured_extraction_failed_reason = "not_list_enumeration_question"
         return None

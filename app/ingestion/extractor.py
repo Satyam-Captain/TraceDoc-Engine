@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from pathlib import Path
 
 from app.ingestion.docx_extractor import extract_docx
 from app.ingestion.models import DocumentExtractionResult
 from app.ingestion.pdf_extractor import extract_pdf
 from app.ingestion.txt_extractor import extract_txt
+
+_EXTRACTOR_ENV = "TRACEDOC_EXTRACTOR"
 
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt"}
 
@@ -47,7 +50,15 @@ def extract_document(file_path: str) -> DocumentExtractionResult:
     file_size = path.stat().st_size
 
     if extension == ".pdf":
-        text, page_count, metadata, warnings = extract_pdf(str(path))
+        extractor_version = os.environ.get(_EXTRACTOR_ENV, "v1").lower()
+        if extractor_version == "v2":
+            from app.ingestion.docling_extractor import extract_pdf_docling
+
+            text, page_count, metadata, warnings = extract_pdf_docling(str(path))
+        else:
+            text, page_count, metadata, warnings = extract_pdf(str(path))
+            extractor_version = "v1"
+        metadata = {**metadata, "extractor_version": extractor_version}
         file_type = "pdf"
     elif extension == ".docx":
         text, page_count, metadata, warnings = extract_docx(str(path))

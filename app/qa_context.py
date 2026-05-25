@@ -16,12 +16,18 @@ from app.evidence.models import (
     AnswerPackage,
 )
 from app.evidence.selector import select_evidence_cards
+from app.evidence.entity_ruler import append_entity_ruler_debug
 from app.evidence.structured_composer import (
     compose_structured_answer_from_context,
     grammar_execution_debug_lines,
 )
 from app.retrieval.models import SearchResult
-from app.retrieval.section_searcher import collect_section_chunks, extract_topic_terms
+from app.retrieval.section_searcher import (
+    collect_section_chunks,
+    extract_topic_terms,
+    is_title_only_trap_section,
+    section_title_matches_document_name,
+)
 from app.schema.models import DiscoveredPattern, DocumentSchema
 from app.schema.registry import primary_grammar_for_category
 from app.structure.chunk_section import (
@@ -66,6 +72,43 @@ class AnswerContext:
     search_results: list[SearchResult] = field(default_factory=list)
     section_score: float = 0.0
     debug_trace: list[str] = field(default_factory=list)
+
+
+def _extraction_lacks_body(
+    extraction_text: str,
+    extraction_sentences: list[str],
+    *,
+    section_title: str,
+    document_name: str,
+    tree_section_empty_fallback: bool,
+) -> bool:
+    """
+    True when tree fallback produced title-only context (no sentences/body).
+
+    Triggers BM25 fallback in QA instead of returning the section title as evidence.
+    """
+    if not tree_section_empty_fallback:
+        return False
+    if extraction_sentences:
+        return False
+
+    stripped = extraction_text.strip()
+    if not stripped:
+        return True
+    if stripped.lower() == section_title.strip().lower():
+        return True
+    if _heading_like(stripped) and section_title_matches_document_name(
+        section_title, document_name
+    ):
+        return True
+
+    lines = [line for line in stripped.splitlines() if line.strip()]
+    if (
+        len(lines) <= 2
+        and section_title_matches_document_name(section_title, document_name)
+    ):
+        return True
+    return False
 
 
 def _heading_like(text: str) -> bool:
@@ -224,6 +267,19 @@ def build_section_answer_context(
         )
         extraction_sentences = []
 
+    suppress_title_only = _extraction_lacks_body(
+        extraction_text,
+        extraction_sentences,
+        section_title=section.title,
+        document_name=document_name,
+        tree_section_empty_fallback=tree_section_empty_fallback,
+    )
+    if suppress_title_only:
+        extraction_text = ""
+        extraction_sentences = []
+        extraction_source = EXTRACTION_SOURCE_CHUNK
+        collected_chunks = []
+
     preview = extraction_text.replace("\n", " ").strip()[:160]
     if len(extraction_text) > 160:
         preview += "..."
@@ -266,6 +322,9 @@ def build_section_answer_context(
         )
         if tree_section_empty_fallback:
             ctx.debug_trace.append("tree_section_empty_fallback=True")
+        if suppress_title_only:
+            ctx.debug_trace.append("title_only_extraction_suppressed=True")
+            ctx.debug_trace.append("needs_bm25_fallback=True")
     if extraction_source == EXTRACTION_SOURCE_CHUNK:
         ctx.debug_trace.extend(
             [
@@ -345,6 +404,8 @@ def build_section_answer_context(
                 why_matched=why_matched,
             )
         ]
+
+    append_entity_ruler_debug(ctx.debug_trace, extraction_text)
     return ctx
 
 

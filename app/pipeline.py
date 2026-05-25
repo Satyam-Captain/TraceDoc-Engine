@@ -117,6 +117,23 @@ def process_document(
             )
             save_knowledge_graph(db_path, document_id, knowledge_graph)
             save_index_bundle(db_path, document_id, index, bm25_stats)
+            from app.retrieval.whoosh_index import (
+                build_whoosh_index,
+                should_build_whoosh_index,
+                whoosh_index_dir,
+            )
+
+            if should_build_whoosh_index():
+                try:
+                    build_whoosh_index(
+                        document_id,
+                        chunks,
+                        whoosh_index_dir(document_id),
+                    )
+                except Exception as whoosh_error:  # noqa: BLE001
+                    warnings.append(
+                        f"whoosh_index_build_failed: {whoosh_error}"
+                    )
             section_count = len(sections)
             chunk_count = len(chunks)
             indexed_term_count = index.vocabulary_size

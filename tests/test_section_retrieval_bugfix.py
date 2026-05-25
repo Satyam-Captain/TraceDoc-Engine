@@ -8,7 +8,15 @@ from app.evidence.models import ANSWER_MODE_STRUCTURED_EXTRACTIVE
 from app.pipeline import process_document
 from app.qa import RETRIEVAL_STRATEGY_SECTION, ask_document
 from app.query.models import INTENT_GENERAL_SEARCH
-from app.retrieval.section_searcher import derive_sections_from_chunks, find_relevant_sections
+from app.qa_context import build_section_answer_context, finalize_answer_context
+from app.retrieval.section_searcher import (
+    derive_sections_from_chunks,
+    find_relevant_sections,
+    is_title_only_trap_section,
+    score_section_relevance,
+)
+from app.structure.models import DocumentChunk
+from app.tree.models import DocumentTree, TreeNode
 from app.retrieval.section_trigger import should_use_section_retrieval
 from app.storage import get_chunks_for_document, get_sections_for_document
 from app.storage.models import StoredSection
@@ -40,6 +48,51 @@ def test_should_use_section_retrieval_for_variants() -> None:
     assert should_use_section_retrieval(
         "what are different architctures mentioned", INTENT_GENERAL_SEARCH
     )
+
+
+DOC_TITLE = "Deterministic Document Question Answering Without AI or LLMs"
+DOC_FILENAME = f"{DOC_TITLE}.pdf"
+
+
+def test_title_only_document_name_section_penalized() -> None:
+    cover = StoredSection(
+        section_id="cover",
+        title=DOC_TITLE,
+        level=1,
+        start_line=1,
+        end_line=2,
+    )
+    body = StoredSection(
+        section_id="arch",
+        title="Existing architectures",
+        level=1,
+        start_line=9,
+        end_line=40,
+    )
+
+    assert is_title_only_trap_section(cover, DOC_FILENAME)
+    assert not is_title_only_trap_section(body, DOC_FILENAME)
+
+    unpenalized = score_section_relevance(
+        "deterministic document question answering",
+        cover,
+        document_name=None,
+    )
+    penalized = score_section_relevance(
+        "deterministic document question answering",
+        cover,
+        document_name=DOC_FILENAME,
+    )
+    assert penalized == unpenalized * 0.25
+
+    ranked = find_relevant_sections(
+        QUESTION,
+        [cover, body],
+        top_k=2,
+        document_name=DOC_FILENAME,
+    )
+    assert ranked
+    assert ranked[0].title == "Existing architectures"
 
 
 def test_find_relevant_sections_ranks_existing_architectures_first() -> None:
@@ -143,6 +196,102 @@ def test_debug_trace_for_architecture_question(tmp_path: Path) -> None:
 
     # Observable trace for UI debugging (printed only on failure by pytest unless -s)
     assert any(line.startswith("candidate_sections=") for line in answer.debug_trace)
+
+
+def test_empty_tree_title_only_suppresses_section_context_for_bm25() -> None:
+    document_name = DOC_FILENAME
+    title = DOC_TITLE
+    trap_section = StoredSection(
+        section_id="cover",
+        title=title,
+        level=1,
+        start_line=1,
+        end_line=2,
+    )
+    body_section_node = TreeNode(
+        node_id="body-sec",
+        node_type="section",
+        title="Use cases before generative AI",
+        text="Use cases before generative AI",
+        start_line=10,
+        end_line=20,
+        children=[
+            TreeNode(
+                node_id="body-p1",
+                node_type="paragraph",
+                text=(
+                    "Enterprise batch analytics and compliance reporting "
+                    "are common pre-generative use cases."
+                ),
+                start_line=11,
+                end_line=14,
+            )
+        ],
+    )
+    cover_node = TreeNode(
+        node_id="cover-sec",
+        node_type="section",
+        title=title,
+        text=title,
+        start_line=1,
+        end_line=2,
+        children=[],
+    )
+    document_tree = DocumentTree(
+        document_name=document_name,
+        root=TreeNode(
+            node_id="root",
+            node_type="document",
+            title=document_name,
+            text="",
+            start_line=1,
+            end_line=20,
+            children=[cover_node, body_section_node],
+        ),
+    )
+    chunks = [
+        DocumentChunk(
+            chunk_id="cover-chunk",
+            document_name=document_name,
+            text=title,
+            chunk_type="section",
+            start_line=1,
+            end_line=2,
+            section_title=title,
+            section_id="cover",
+        ),
+        DocumentChunk(
+            chunk_id="body-chunk",
+            document_name=document_name,
+            text=body_section_node.children[0].text,
+            chunk_type="paragraph",
+            start_line=11,
+            end_line=14,
+            section_title="Use cases before generative AI",
+            section_id="body-sec",
+        ),
+    ]
+
+    ctx = build_section_answer_context(
+        question="explain use cases before generative AI",
+        document_name=document_name,
+        section=trap_section,
+        chunks=chunks,
+        section_score=3.0,
+        target_category=None,
+        document_schema=None,
+        document_tree=document_tree,
+    )
+    package = finalize_answer_context(ctx)
+
+    assert package.answer_mode == "NO_EVIDENCE"
+    assert ctx.search_results == []
+    assert ctx.extraction_text == ""
+    trace = "\n".join(ctx.debug_trace)
+    assert "tree_section_empty_fallback=True" in trace
+    assert "title_only_extraction_suppressed=True" in trace
+    assert "needs_bm25_fallback=True" in trace
+    assert "extraction_sentence_count=0" in trace
 
 
 def test_bm25_fallback_when_no_section_match(tmp_path: Path) -> None:

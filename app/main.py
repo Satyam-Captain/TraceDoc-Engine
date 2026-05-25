@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from dataclasses import dataclass
@@ -89,6 +90,76 @@ ARCHITECTURE_DOC_URL = (
 ARCHITECTURE_DRAWIO_URL = (
     "https://github.com/Satyam-Captain/TraceDoc-Engine/blob/master/docs/architecture.drawio"
 )
+
+STACK_PRESETS: dict[str, dict[str, str]] = {
+    "v1 — Classic": {
+        "TRACEDOC_EXTRACTOR": "v1",
+        "TRACEDOC_RETRIEVAL": "sqlite",
+        "TRACEDOC_EXTRACTION": "grammar",
+    },
+    "v2 — Full stack": {
+        "TRACEDOC_EXTRACTOR": "v2",
+        "TRACEDOC_RETRIEVAL": "hybrid",
+        "TRACEDOC_EXTRACTION": "both",
+    },
+}
+
+
+def _preset_from_environment() -> str:
+    """Map current env vars to a sidebar preset label."""
+    extractor = os.environ.get("TRACEDOC_EXTRACTOR", "v1").lower()
+    retrieval = os.environ.get("TRACEDOC_RETRIEVAL", "sqlite").lower()
+    extraction = os.environ.get("TRACEDOC_EXTRACTION", "grammar").lower()
+    for label, flags in STACK_PRESETS.items():
+        if (
+            flags["TRACEDOC_EXTRACTOR"] == extractor
+            and flags["TRACEDOC_RETRIEVAL"] == retrieval
+            and flags["TRACEDOC_EXTRACTION"] == extraction
+        ):
+            return label
+    return "v2 — Full stack"
+
+
+def apply_stack_preset(preset_label: str) -> dict[str, str]:
+    """Apply a stack preset to os.environ for this Streamlit process."""
+    flags = STACK_PRESETS[preset_label]
+    for key, value in flags.items():
+        os.environ[key] = value
+    return dict(flags)
+
+
+def _render_engine_stack_sidebar() -> dict[str, str]:
+    """Sidebar toggle for v1 vs v2 without a second Streamlit port."""
+    st.sidebar.subheader("Engine stack")
+    preset_labels = list(STACK_PRESETS.keys())
+    default_index = preset_labels.index(_preset_from_environment())
+    preset = st.sidebar.radio(
+        "Version",
+        options=preset_labels,
+        index=default_index,
+        key="engine_stack_preset",
+        help=(
+            "v1: pypdf + SQLite BM25 + grammar only. "
+            "v2: Docling PDF + hybrid Whoosh/SQLite + grammar + EntityRuler debug."
+        ),
+    )
+    active = apply_stack_preset(preset)
+
+    st.sidebar.markdown("**Active flags**")
+    st.sidebar.code(
+        "\n".join(f"{key}={value}" for key, value in active.items()),
+        language="bash",
+    )
+    if preset.startswith("v2"):
+        st.sidebar.caption(
+            "v2 needs `pip install -r requirements-v2.txt`. "
+            "Large PDFs may need v1 or more RAM."
+        )
+    st.sidebar.caption(
+        "Switching stack does not re-index existing documents. "
+        "Clear data or re-process after changing version."
+    )
+    return active
 
 
 @dataclass(frozen=True)
@@ -613,6 +684,7 @@ def main() -> None:
         _render_architecture_section()
         return
 
+    _render_engine_stack_sidebar()
     initialize_database(DB_PATH)
     _render_sidebar(DB_PATH)
     _render_upload_section(DB_PATH)

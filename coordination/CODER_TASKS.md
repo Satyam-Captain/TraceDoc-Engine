@@ -1,0 +1,167 @@
+# Coder tasks — active sprint
+
+**Branch:** `feat/deterministic-stack-v2`  
+**Read first:** `coordination/ARCHITECT_CONTEXT.md`  
+**Update this file:** Mark `[x]` when done; add PR notes in **Done notes** section.
+
+**After each P-section:** commit, push, tell human `BUILD_DONE slice=S#` — TEST agent runs preflight before next section.
+
+**Forbidden:** hardcoding one document's headings in `pdf_layout.py` (generic Docling only).
+
+---
+
+## P0 — Setup (15 min)
+
+- [x] **T0.1** Pull branch `feat/deterministic-stack-v2`
+- [x] **T0.2** Create `requirements-v2.txt`:
+
+```text
+docling>=2.0
+whoosh>=2.7
+spacy>=3.7
+```
+
+- [x] **T0.3** Install: `pip install -r requirements.txt -r requirements-v2.txt`
+- [x] **T0.4** Verify spaCy blank (no model download):
+
+```python
+from spacy.lang.en import English
+nlp = English()
+assert not nlp.pipe_names  # or only entity_ruler after add
+```
+
+- [x] **T0.5** Run baseline: `pytest -q` (must pass before changes)
+
+---
+
+## P1 — Docling PDF extraction (90 min) — CRITICAL PATH
+
+- [x] **T1.1** Add `app/ingestion/docling_extractor.py`
+
+  - Function: `extract_pdf_docling(file_path: str) -> tuple[str, int | None, dict, list[str]]`
+  - Use Docling to convert PDF → markdown or plain text with line breaks
+  - Normalize: `\r\n` → `\n`, collapse 3+ newlines to 2
+  - Warnings list: e.g. `"docling_v2"`, page count if available
+  - On Docling failure: raise with clear message (no silent fallback to pypdf in v2 mode)
+
+- [x] **T1.2** Update `app/ingestion/extractor.py`
+
+  - Read `os.environ.get("TRACEDOC_EXTRACTOR", "v1").lower()`
+  - If `v2` and extension `.pdf`: call `extract_pdf_docling`
+  - Else: existing behavior
+  - Add metadata key `extractor_version: v1|v2`
+
+- [x] **T1.3** Tests `tests/test_docling_extractor.py`
+
+  - Skip if docling not installed (`pytest.importorskip`)
+  - Use smallest PDF in `samples/` or create tiny fixture
+  - Assert non-empty text and `\n` in output
+
+- [x] **T1.4** Do **not** delete `pdf_layout.py` yet; v1 path unchanged
+
+**Done when:** `TRACEDOC_EXTRACTOR=v2 pytest tests/test_docling_extractor.py -q` passes
+
+---
+
+## P2 — Whoosh BM25 retrieval (90 min)
+
+- [x] **T2.1** Add `app/retrieval/whoosh_index.py`
+
+  - Schema fields: `chunk_id` (ID, stored), `text` (TEXT), `section_id` (TEXT)
+  - `build_whoosh_index(document_id, chunks, index_dir: Path) -> Path`
+  - Store under `data/index/whoosh/{document_id}/`
+  - Use BM25 similarity (Whoosh default)
+
+- [x] **T2.2** Add `app/retrieval/whoosh_searcher.py`
+
+  - `search_whoosh(index_path, query: str, limit: int = 10) -> list[SearchResult]`
+  - Map Whoosh hits → existing `SearchResult` model (same as BM25 searcher)
+
+- [x] **T2.3** Hook `app/pipeline.py` after `prepare_document_chunks`
+
+  - If `TRACEDOC_RETRIEVAL` in (`whoosh`, `hybrid`): build Whoosh index
+  - Log warning in `ProcessedDocumentResult.warnings` if index build fails
+
+- [x] **T2.4** Hook `app/qa.py` / `app/retrieval/searcher.py`
+
+  - If `whoosh`: use Whoosh only for chunk search
+  - If `hybrid`: run both, merge by max score, deterministic tie-break `chunk_id`
+  - Section retrieval path **unchanged** (still primary for list questions)
+
+- [x] **T2.5** Tests `tests/test_whoosh_retrieval.py` with temp dir
+
+**Done when:** `TRACEDOC_RETRIEVAL=whoosh pytest tests/test_whoosh_retrieval.py -q` passes
+
+---
+
+## P3 — spaCy EntityRuler (60 min) — NO ML MODEL
+
+- [x] **T3.1** Add `app/evidence/entity_ruler.py`
+
+  - `build_ruler_nlp()` → `Language.blank("en")` + `entity_ruler`
+  - Patterns (minimum):
+    - `REQUIREMENT`: `[{"LOWER": "must"}, {"IS_ALPHA": True, "OP": "+"}]`
+    - `REQUIREMENT`: `[{"LOWER": "shall"}, ...]`
+    - `DEFINITION`: `[{"LOWER": "is"}, {"LOWER": "defined"}, {"LOWER": "as"}]` (token window)
+  - `extract_ruler_entities(text: str) -> list[dict]` with `label`, `text`, `start`, `end`
+
+- [x] **T3.2** Integrate in `app/evidence/structured_composer.py` or `pattern_extractor.py`
+
+  - Only when `TRACEDOC_EXTRACTION` in (`ruler`, `both`)
+  - Append ruler entities to debug trace; do not replace grammar extraction
+
+- [x] **T3.3** Test `tests/test_entity_ruler.py` — deterministic spans on sample sentence
+
+**Done when:** No `spacy download` in CI; blank English only
+
+---
+
+## P4 — Integration & preflight (45 min)
+
+- [x] **T4.1** Ensure `scripts/preflight_tester.py` runs (architect added; extend if needed)
+
+  - Report `extractor_version`, section titles, gate status
+
+- [x] **T4.2** Document flags in `coordination/TESTER_GUIDE.md` (architect owns; coder add env examples if new flags)
+
+- [x] **T4.3** Run full gate:
+
+```powershell
+$env:TRACEDOC_EXTRACTOR="v2"
+$env:TRACEDOC_RETRIEVAL="hybrid"
+$env:TRACEDOC_EXTRACTION="both"
+pytest -q
+python eval/run_eval.py
+python scripts/preflight_tester.py samples/your_test.pdf
+```
+
+- [x] **T4.4** Commit coder changes with message: `feat(v2): docling + whoosh + entity ruler behind env flags`
+
+---
+
+## Explicitly OUT OF SCOPE (do not implement)
+
+- LLM / Ollama / OpenAI
+- `en_core_web_sm` or any `spacy download`
+- Neo4j, Tika/JVM (post-sprint)
+- Rewriting `detector.py`, graph matcher, or Streamlit UI (unless 1-line env display)
+
+---
+
+## Done notes (coder fills in)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| P0 | done | Branch, requirements-v2, install, spaCy blank, baseline pytest |
+| P1 | done | Docling extractor + TRACEDOC_EXTRACTOR=v2 dispatch + tests |
+| P2 | done | Whoosh index + whoosh/hybrid retrieval with SQLite fallback |
+| P3 | done | Blank English EntityRuler behind TRACEDOC_EXTRACTION |
+| P4 | done | README + TESTER_GUIDE production env; pytest + eval gate PASS |
+
+---
+
+## Blockers → ping architect
+
+List here if stuck >15 min:
+
+1. 

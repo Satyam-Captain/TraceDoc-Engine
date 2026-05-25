@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 from app.audit import log_audit_event
 from app.evidence import compose_answer_package, compose_structured_answer
+from app.evidence.entity_ruler import append_entity_ruler_debug
 from app.evidence.structured_composer import (
     architecture_evidence_text,
     architecture_extraction_trace,
@@ -43,13 +44,14 @@ from app.retrieval import (
     extract_topic_terms,
     find_relevant_sections,
     score_section_relevance,
-    search_chunks,
+    search_chunks_for_document,
     should_use_section_retrieval,
 )
 from app.structure.hierarchy import infer_section_ranges
 from app.structure.models import DocumentChunk, DocumentSection
 from app.structure.section_assignment import reassign_chunk_sections
 from app.retrieval.models import SearchResult
+from app.retrieval.whoosh_index import get_retrieval_mode
 from app.schema.discovery import format_category_normalization_trace, match_question_to_schema_category
 from app.schema.query_category import resolve_query_target_category
 from app.schema.registry import build_pattern_registry
@@ -577,6 +579,7 @@ def ask_document(
                     sections,
                     top_k=3,
                     document_schema=document_schema,
+                    document_name=document.file_name,
                 )
                 if not ranked_sections:
                     debug_trace.append("fallback_reason=no_relevant_section")
@@ -606,6 +609,7 @@ def ask_document(
                         question,
                         best_section,
                         document_schema=document_schema,
+                        document_name=document.file_name,
                     )
                     debug_trace.append(f"selected_section_score={section_score:.2f}")
                     section_chunks = collect_section_chunks(
@@ -655,13 +659,17 @@ def ask_document(
             ):
                 debug_trace.append("fallback_reason=section_path_empty_results")
             debug_trace.append("using_bm25_fallback=True")
+            retrieval_mode = get_retrieval_mode()
+            debug_trace.append(f"retrieval_mode={retrieval_mode}")
             index = load_index_for_document(db_path, document_id)
             bm25_stats = load_bm25_statistics(db_path, document_id)
-            search_results = search_chunks(
+            search_results = search_chunks_for_document(
                 retrieval_query,
                 index,
                 bm25_stats,
+                document_id=document_id,
                 top_k=top_k,
+                retrieval_mode=retrieval_mode,
                 intent_type=query_intent.intent_type,
                 entities=query_intent.entities,
             )
@@ -700,6 +708,12 @@ def ask_document(
                 else architecture_evidence_text(package.cards)
             )
             debug_trace.extend(architecture_extraction_trace(arch_text))
+
+        if section_answer_context is None and package.cards:
+            append_entity_ruler_debug(
+                debug_trace,
+                architecture_evidence_text(package.cards),
+            )
 
         result = DocumentQAResult(
             question=package.question,
@@ -816,10 +830,11 @@ def ask_all_documents(
             if not statistics:
                 continue
             index = load_index_for_document(db_path, document.id)
-            doc_results = search_chunks(
+            doc_results = search_chunks_for_document(
                 retrieval_query,
                 index,
                 statistics,
+                document_id=document.id,
                 top_k=top_k_per_document,
                 intent_type=query_intent.intent_type,
                 entities=query_intent.entities,

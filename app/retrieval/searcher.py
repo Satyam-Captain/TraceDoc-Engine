@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from app.indexing.models import InvertedIndex
 from app.indexing.normalizer import normalize_token
 from app.indexing.stopwords import is_stopword
@@ -134,3 +136,91 @@ def search_chunks(
         )
     )
     return results[:top_k]
+
+
+def merge_retrieval_results(
+    *result_lists: list[SearchResult],
+    top_k: int,
+) -> list[SearchResult]:
+    """
+    Merge ranked lists by max score per chunk_id; tie-break by chunk_id ascending.
+    """
+    if top_k <= 0:
+        return []
+
+    merged: dict[str, SearchResult] = {}
+    for results in result_lists:
+        for result in results:
+            existing = merged.get(result.chunk_id)
+            if existing is None:
+                merged[result.chunk_id] = result
+                continue
+            if result.score > existing.score:
+                merged[result.chunk_id] = result
+            elif result.score == existing.score and result.chunk_id < existing.chunk_id:
+                merged[result.chunk_id] = result
+
+    ordered = sorted(merged.values(), key=lambda item: (-item.score, item.chunk_id))
+    return ordered[:top_k]
+
+
+def search_chunks_for_document(
+    query: str,
+    index: InvertedIndex,
+    bm25_stats: dict,
+    *,
+    document_id: int,
+    top_k: int = 5,
+    retrieval_mode: str | None = None,
+    intent_type: str | None = None,
+    entities: list[str] | None = None,
+    whoosh_index_path: Path | None = None,
+) -> list[SearchResult]:
+    """
+    Search chunks using TRACEDOC_RETRIEVAL (sqlite, whoosh, or hybrid).
+
+    Falls back to SQLite BM25 when mode is whoosh/hybrid but the Whoosh index
+    is missing or returns no hits.
+    """
+    from app.retrieval.whoosh_index import (
+        get_retrieval_mode,
+        whoosh_index_dir as resolve_whoosh_dir,
+        whoosh_index_exists,
+    )
+    from app.retrieval.whoosh_searcher import search_whoosh
+
+    mode = (retrieval_mode or get_retrieval_mode()).lower()
+    sqlite_results = search_chunks(
+        query,
+        index,
+        bm25_stats,
+        top_k=top_k,
+        intent_type=intent_type,
+        entities=entities,
+    )
+
+    if mode == "sqlite":
+        return sqlite_results
+
+    index_path = whoosh_index_path or resolve_whoosh_dir(document_id)
+    if not whoosh_index_exists(index_path):
+        return sqlite_results
+
+    document_name = ""
+    if index.chunk_statistics:
+        first = next(iter(index.chunk_statistics.values()))
+        document_name = first.document_name
+
+    whoosh_results = search_whoosh(
+        index_path,
+        query,
+        limit=max(top_k, top_k * 2),
+        document_name=document_name,
+        intent_type=intent_type,
+        entities=entities,
+    )
+
+    if mode == "whoosh":
+        return whoosh_results[:top_k] if whoosh_results else sqlite_results
+
+    return merge_retrieval_results(sqlite_results, whoosh_results, top_k=top_k)

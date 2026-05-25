@@ -1,0 +1,7 @@
+# Deterministic stack v2 (feat/deterministic-stack-v2)
+# Install: pip install -r requirements.txt -r requirements-v2.txt
+# No LLM / no spaCy statistical models — blank English + EntityRuler only.
+
+docling>=2.0
+whoosh>=2.7
+spacy>=3.7
