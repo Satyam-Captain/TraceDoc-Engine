@@ -102,7 +102,21 @@ streamlit run app/main.py
 4. Paste into `TEST_RESULTS.md` → **Round 1 — UI (human)** table.
 5. Tell **architect chat**: `review Round 1`
 
-### → BUILD agent (slice S2, after architect approves S1 or fixes listed)
+### → BUILD agent (slice S1.5 — NOW, before S2)
+
+```
+You are the BUILD agent for TraceDoc.
+
+Branch: feat/deterministic-stack-v2
+Read: coordination/CODER_TASKS_S1.5.md
+
+Implement T1.5.1 and T1.5.2 (generic rules only, no document-specific strings).
+pytest must pass. Commit push.
+
+Reply: BUILD_DONE slice=S1.5
+```
+
+### → BUILD agent (slice S2, after Round 1b passes)
 
 ```
 BUILD agent: implement CODER_TASKS P2 (Whoosh) on feat/deterministic-stack-v2.
@@ -158,9 +172,10 @@ Then you only do UI paste + `review Round 1` to architect.
 
 | Slice | BUILD | TEST | UI (you) | Architect |
 |-------|-------|------|----------|-----------|
-| S0 | ⬜ | ⬜ | — | — |
-| S1 | ⬜ | ⬜ | ⬜ | ⬜ |
-| S2 | ⬜ | ⬜ | ⬜ | ⬜ |
+| S0 | ✅ | ⬜ | — | — |
+| S1 BUILD | ✅ | ⬜ | UI R1 fail | Review done |
+| S1.5 hotfix | ⬜ | ⬜ | ⬜ | ⬜ |
+| S2 | blocked | — | — | — |
 | S3 | ⬜ | ⬜ | ⬜ | ⬜ |
 | S4 | ⬜ | ⬜ | ⬜ | ⬜ |
 

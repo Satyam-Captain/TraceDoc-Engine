@@ -130,10 +130,12 @@ coordination/TESTER_GUIDE.md              when to test
 |------|-------|
 | Branch `feat/deterministic-stack-v2` | Created |
 | Coordination docs | Created |
-| P1 Docling | **NOT STARTED** — see CODER_TASKS.md |
-| P2 Whoosh | **NOT STARTED** |
+| P1 Docling | **DONE** (BUILD S1) |
+| S1.5 Section/title trap fix | **REQUIRED** — see `CODER_TASKS_S1.5.md` |
+| P2 Whoosh | **BLOCKED** until Round 1b passes |
 | P3 EntityRuler | **NOT STARTED** |
-| User test round 1 | **WAITING** |
+| User Round 1 UI | **FAIL** Q1/Q3 — stale DB + wrong section; Q2 OK |
+| User Round 1b | **WAITING** — re-index after DB clear |
 
 ---
 
