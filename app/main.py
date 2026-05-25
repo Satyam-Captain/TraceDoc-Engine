@@ -152,8 +152,7 @@ def _render_engine_stack_sidebar() -> dict[str, str]:
     )
     if preset.startswith("v2"):
         st.sidebar.caption(
-            "v2 needs `pip install -r requirements-v2.txt`. "
-            "Large PDFs may need v1 or more RAM."
+            "v2 uses Docling for PDFs (heavy). Large PDFs may need v1 or more RAM."
         )
     st.sidebar.caption(
         "Switching stack does not re-index existing documents. "

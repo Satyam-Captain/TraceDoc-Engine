@@ -2,3 +2,8 @@ pypdf
 python-docx
 pytest
 streamlit
+
+# v2 deterministic stack (required for app import; see README env flags)
+whoosh>=2.7
+spacy>=3.7
+docling>=2.0

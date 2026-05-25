@@ -1,5 +1,6 @@
-# Deterministic stack v2 (feat/deterministic-stack-v2)
-# Install: pip install -r requirements.txt -r requirements-v2.txt
+# v2 stack is now included in requirements.txt (Streamlit Cloud / single pip install).
+# This file is kept for documentation and explicit reinstall:
+#   pip install -r requirements-v2.txt
 # No LLM / no spaCy statistical models — blank English + EntityRuler only.
 
 docling>=2.0

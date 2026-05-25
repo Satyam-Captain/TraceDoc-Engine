@@ -162,11 +162,13 @@ pip install -r requirements.txt
 
 ### v2 deterministic stack (Docling + Whoosh + EntityRuler)
 
-Install the optional v2 dependencies (Docling PDF extraction, Whoosh BM25 index, spaCy blank `entity_ruler`):
+Install dependencies (includes v2 stack: Docling, Whoosh, spaCy blank `entity_ruler`):
 
 ```bash
-pip install -r requirements.txt -r requirements-v2.txt
+pip install -r requirements.txt
 ```
+
+Optional duplicate pin file: `requirements-v2.txt` (same packages, for docs only).
 
 | Variable | Values | Default | Purpose |
 |----------|--------|---------|---------|
