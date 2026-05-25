@@ -12,8 +12,8 @@
 
 ## P0 — Setup (15 min)
 
-- [ ] **T0.1** Pull branch `feat/deterministic-stack-v2`
-- [ ] **T0.2** Create `requirements-v2.txt`:
+- [x] **T0.1** Pull branch `feat/deterministic-stack-v2`
+- [x] **T0.2** Create `requirements-v2.txt`:
 
 ```text
 docling>=2.0
@@ -21,8 +21,8 @@ whoosh>=2.7
 spacy>=3.7
 ```
 
-- [ ] **T0.3** Install: `pip install -r requirements.txt -r requirements-v2.txt`
-- [ ] **T0.4** Verify spaCy blank (no model download):
+- [x] **T0.3** Install: `pip install -r requirements.txt -r requirements-v2.txt`
+- [x] **T0.4** Verify spaCy blank (no model download):
 
 ```python
 from spacy.lang.en import English
@@ -30,13 +30,13 @@ nlp = English()
 assert not nlp.pipe_names  # or only entity_ruler after add
 ```
 
-- [ ] **T0.5** Run baseline: `pytest -q` (must pass before changes)
+- [x] **T0.5** Run baseline: `pytest -q` (must pass before changes)
 
 ---
 
 ## P1 — Docling PDF extraction (90 min) — CRITICAL PATH
 
-- [ ] **T1.1** Add `app/ingestion/docling_extractor.py`
+- [x] **T1.1** Add `app/ingestion/docling_extractor.py`
 
   - Function: `extract_pdf_docling(file_path: str) -> tuple[str, int | None, dict, list[str]]`
   - Use Docling to convert PDF → markdown or plain text with line breaks
@@ -44,20 +44,20 @@ assert not nlp.pipe_names  # or only entity_ruler after add
   - Warnings list: e.g. `"docling_v2"`, page count if available
   - On Docling failure: raise with clear message (no silent fallback to pypdf in v2 mode)
 
-- [ ] **T1.2** Update `app/ingestion/extractor.py`
+- [x] **T1.2** Update `app/ingestion/extractor.py`
 
   - Read `os.environ.get("TRACEDOC_EXTRACTOR", "v1").lower()`
   - If `v2` and extension `.pdf`: call `extract_pdf_docling`
   - Else: existing behavior
   - Add metadata key `extractor_version: v1|v2`
 
-- [ ] **T1.3** Tests `tests/test_docling_extractor.py`
+- [x] **T1.3** Tests `tests/test_docling_extractor.py`
 
   - Skip if docling not installed (`pytest.importorskip`)
   - Use smallest PDF in `samples/` or create tiny fixture
   - Assert non-empty text and `\n` in output
 
-- [ ] **T1.4** Do **not** delete `pdf_layout.py` yet; v1 path unchanged
+- [x] **T1.4** Do **not** delete `pdf_layout.py` yet; v1 path unchanged
 
 **Done when:** `TRACEDOC_EXTRACTOR=v2 pytest tests/test_docling_extractor.py -q` passes
 
@@ -152,8 +152,8 @@ python scripts/preflight_tester.py samples/your_test.pdf
 
 | Task | Status | Notes |
 |------|--------|-------|
-| P0 | | |
-| P1 | | |
+| P0 | done | Branch, requirements-v2, install, spaCy blank, baseline pytest |
+| P1 | done | Docling extractor + TRACEDOC_EXTRACTOR=v2 dispatch + tests |
 | P2 | | |
 | P3 | | |
 | P4 | | |
