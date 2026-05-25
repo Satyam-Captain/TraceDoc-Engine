@@ -96,7 +96,7 @@ assert not nlp.pipe_names  # or only entity_ruler after add
 
 ## P3 — spaCy EntityRuler (60 min) — NO ML MODEL
 
-- [ ] **T3.1** Add `app/evidence/entity_ruler.py`
+- [x] **T3.1** Add `app/evidence/entity_ruler.py`
 
   - `build_ruler_nlp()` → `Language.blank("en")` + `entity_ruler`
   - Patterns (minimum):
@@ -105,12 +105,12 @@ assert not nlp.pipe_names  # or only entity_ruler after add
     - `DEFINITION`: `[{"LOWER": "is"}, {"LOWER": "defined"}, {"LOWER": "as"}]` (token window)
   - `extract_ruler_entities(text: str) -> list[dict]` with `label`, `text`, `start`, `end`
 
-- [ ] **T3.2** Integrate in `app/evidence/structured_composer.py` or `pattern_extractor.py`
+- [x] **T3.2** Integrate in `app/evidence/structured_composer.py` or `pattern_extractor.py`
 
   - Only when `TRACEDOC_EXTRACTION` in (`ruler`, `both`)
   - Append ruler entities to debug trace; do not replace grammar extraction
 
-- [ ] **T3.3** Test `tests/test_entity_ruler.py` — deterministic spans on sample sentence
+- [x] **T3.3** Test `tests/test_entity_ruler.py` — deterministic spans on sample sentence
 
 **Done when:** No `spacy download` in CI; blank English only
 
@@ -155,7 +155,7 @@ python scripts/preflight_tester.py samples/your_test.pdf
 | P0 | done | Branch, requirements-v2, install, spaCy blank, baseline pytest |
 | P1 | done | Docling extractor + TRACEDOC_EXTRACTOR=v2 dispatch + tests |
 | P2 | done | Whoosh index + whoosh/hybrid retrieval with SQLite fallback |
-| P3 | | |
+| P3 | done | Blank English EntityRuler behind TRACEDOC_EXTRACTION |
 | P4 | | |
 
 ---

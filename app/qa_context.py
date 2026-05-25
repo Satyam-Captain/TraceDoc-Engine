@@ -16,6 +16,7 @@ from app.evidence.models import (
     AnswerPackage,
 )
 from app.evidence.selector import select_evidence_cards
+from app.evidence.entity_ruler import append_entity_ruler_debug
 from app.evidence.structured_composer import (
     compose_structured_answer_from_context,
     grammar_execution_debug_lines,
@@ -403,6 +404,8 @@ def build_section_answer_context(
                 why_matched=why_matched,
             )
         ]
+
+    append_entity_ruler_debug(ctx.debug_trace, extraction_text)
     return ctx
 
 

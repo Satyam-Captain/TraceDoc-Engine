@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 from app.audit import log_audit_event
 from app.evidence import compose_answer_package, compose_structured_answer
+from app.evidence.entity_ruler import append_entity_ruler_debug
 from app.evidence.structured_composer import (
     architecture_evidence_text,
     architecture_extraction_trace,
@@ -707,6 +708,12 @@ def ask_document(
                 else architecture_evidence_text(package.cards)
             )
             debug_trace.extend(architecture_extraction_trace(arch_text))
+
+        if section_answer_context is None and package.cards:
+            append_entity_ruler_debug(
+                debug_trace,
+                architecture_evidence_text(package.cards),
+            )
 
         result = DocumentQAResult(
             question=package.question,
