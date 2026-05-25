@@ -116,7 +116,46 @@ pytest must pass. Commit push.
 Reply: BUILD_DONE slice=S1.5
 ```
 
-### → BUILD agent (slice S2, after Round 1b passes)
+### → TEST agent (slice S2 — NOW)
+
+```
+You are the TEST agent for TraceDoc.
+
+Branch: feat/deterministic-stack-v2
+git pull
+
+Run:
+1. python -m pytest -q
+2. $env:TRACEDOC_EXTRACTOR="v2"; $env:TRACEDOC_RETRIEVAL="hybrid"; python -m pytest tests/test_whoosh_retrieval.py -q
+3. python eval/run_eval.py  (with same env vars)
+4. Process + preflight optional on benchmark txt
+
+Append output to coordination/TEST_RESULTS.md under "## Round 2 - TEST agent"
+
+Reply: TEST_DONE slice=S2 pytest=PASS eval=PASS|FAIL
+```
+
+### → YOU (human) — after TEST_DONE pytest=PASS
+
+**Re-process is required** — Whoosh index is built at process time.
+
+```powershell
+git pull
+$env:TRACEDOC_EXTRACTOR="v2"
+$env:TRACEDOC_RETRIEVAL="hybrid"
+.\.venv\Scripts\streamlit run app/main.py
+```
+
+1. Delete `data/tracedoc.db` OR upload with new name (so document re-processes)
+2. Process PDF — check warnings mention whoosh index / no index failure
+3. Ask:
+   - `where does deterministic system wins?` (BM25/hybrid path)
+   - `enterprise usecases before generative AI`
+   - `what are different design patterns mentioned?`
+4. Paste UI + note `retrieval_strategy` / debug `whoosh` lines into TEST_RESULTS.md `## Round 2 - UI`
+5. Tell architect: `review Round 2`
+
+### → BUILD agent (slice S3 — after Round 2 OK)
 
 ```
 BUILD agent: implement CODER_TASKS P2 (Whoosh) on feat/deterministic-stack-v2.
@@ -175,7 +214,8 @@ Then you only do UI paste + `review Round 1` to architect.
 | S0 | ✅ | ⬜ | — | — |
 | S1 BUILD | ✅ | ⬜ | UI R1 fail | Review done |
 | S1.5 hotfix | ✅ | — | R1b pass | ✅ |
-| S2 Whoosh | ⬜ | ⬜ | after S2 | — |
+| S2 Whoosh | ✅ | ⬜ | Round 2 UI | — |
+| S3 Ruler | ⬜ | — | — | — |
 | S3 | ⬜ | ⬜ | ⬜ | ⬜ |
 | S4 | ⬜ | ⬜ | ⬜ | ⬜ |
 
