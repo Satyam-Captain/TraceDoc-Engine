@@ -4,6 +4,10 @@
 **Read first:** `coordination/ARCHITECT_CONTEXT.md`  
 **Update this file:** Mark `[x]` when done; add PR notes in **Done notes** section.
 
+**After each P-section:** commit, push, tell human `BUILD_DONE slice=S#` — TEST agent runs preflight before next section.
+
+**Forbidden:** hardcoding one document's headings in `pdf_layout.py` (generic Docling only).
+
 ---
 
 ## P0 — Setup (15 min)

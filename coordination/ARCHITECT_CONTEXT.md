@@ -1,8 +1,12 @@
 # Architect context (source of truth)
 
-**Last updated:** 2026-05-25  
+**Last updated:** 2026-05-25 (continuous loop + agent router)  
 **Branch:** `feat/deterministic-stack-v2`  
 **Architect role:** Plan, gate merges, read `TEST_RESULTS.md`, update `CODER_TASKS.md`. Do not implement production code unless blocking.
+
+**Human coordinator:** paste UI/terminal into `TEST_RESULTS.md`; use `AGENT_ROUTER.md` for which Cursor agent to prompt next.
+
+**Strategy clarification:** We are **not** fixing one PDF at a time. We replace **generic layers** (parse → retrieve → extract). Testing is **continuous** after each slice (S1–S4), with benchmark + your PDF as regression guards.
 
 ---
 
@@ -67,16 +71,17 @@ Question
 
 ---
 
-## Sprint phases & time budget (~4–6 hours total)
+## Sprint slices (implement + test each slice before next)
 
-| Phase | ETA | Owner | Done when |
-|-------|-----|-------|-----------|
-| P0 Coordination + branch | 15m | Architect | This folder + push |
-| P1 Docling PDF ingest | 90m | Coder | PDF extracts markdown-ish lines; tests green |
-| P2 Whoosh per-doc index | 90m | Coder | Search returns chunks; flag `whoosh` works |
-| P3 spaCy EntityRuler | 60m | Coder | Blank lang + requirement patterns; no model download |
-| P4 Wire QA + preflight | 45m | Coder | Flags read in pipeline/qa |
-| P5 User test cycle | ongoing | Tester (you) | `TEST_RESULTS.md` filled; architect signs off |
+| Slice | BUILD | TEST (agent) | YOU (paste UI) |
+|-------|-------|--------------|----------------|
+| S0 | P0 deps | pytest baseline | — |
+| S1 | P1 Docling | preflight v1 vs v2 on benchmark + your PDF | UI if GREEN+ |
+| S2 | P2 Whoosh | pytest + preflight hybrid | optional |
+| S3 | P3 Ruler | pytest | optional |
+| S4 | P4 + eval | eval PASS + preflight | full UI round |
+
+See `coordination/AGENT_ROUTER.md` for copy-paste prompts.
 
 ---
 
