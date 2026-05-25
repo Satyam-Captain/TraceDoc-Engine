@@ -170,9 +170,52 @@ TEST agent: pytest -q, preflight with TRACEDOC_EXTRACTOR=v2 and TRACEDOC_RETRIEV
 Update TEST_RESULTS.md. Reply: TEST_DONE slice=S2 gate=...
 ```
 
-### → BUILD agent (slice S3–S4)
+### → TEST agent (slice S3 / P4 gate — NOW)
 
-Same pattern: P3 EntityRuler → TEST → P4 integration + eval → TEST runs eval → YOU UI test → architect review Round 2.
+```
+You are the TEST agent for TraceDoc.
+
+Branch: feat/deterministic-stack-v2
+git pull
+
+$env:TRACEDOC_EXTRACTOR="v2"
+$env:TRACEDOC_RETRIEVAL="hybrid"
+$env:TRACEDOC_EXTRACTION="both"
+
+Run:
+1. python -m pytest -q
+2. python -m pytest tests/test_entity_ruler.py -q
+3. python eval/run_eval.py
+4. python scripts/preflight_tester.py eval/benchmark_docs/symbolic_architecture_doc.txt
+
+Append to coordination/TEST_RESULTS.md under "## Round 3 - TEST agent"
+
+Reply: TEST_DONE slice=S3 pytest=PASS eval=PASS
+```
+
+### → YOU (human) — after TEST pass
+
+```powershell
+git pull
+$env:TRACEDOC_EXTRACTOR="v2"
+$env:TRACEDOC_RETRIEVAL="hybrid"
+$env:TRACEDOC_EXTRACTION="both"
+.\.venv\Scripts\streamlit run app/main.py
+```
+
+Re-process doc if needed. Ask any question; expand **C. Debug trace** and confirm lines like:
+`entity_ruler_count=...` `entity_ruler_REQUIREMENT=...`
+
+Paste debug trace + answer into TEST_RESULTS.md `## Round 3 - UI`
+Tell architect: review Round 3
+
+### → BUILD agent (slice S4 — after Round 3 OK)
+
+```
+P4 in CODER_TASKS.md: mark T4.1-T4.4, update TESTER_GUIDE with full v2 env block, README note on requirements-v2.txt.
+Commit: feat(v2): complete deterministic stack behind env flags
+BUILD_DONE slice=S4
+```
 
 ---
 
@@ -215,7 +258,8 @@ Then you only do UI paste + `review Round 1` to architect.
 | S1 BUILD | ✅ | ⬜ | UI R1 fail | Review done |
 | S1.5 hotfix | ✅ | — | R1b pass | ✅ |
 | S2 Whoosh | ✅ | ✅ | R2 pass | ✅ |
-| S3 Ruler | ⬜ | — | Round 3 | — |
+| S3 Ruler | ✅ | ⬜ | Round 3 UI | — |
+| S4 Final | ⬜ | ⬜ | merge | — |
 | S3 | ⬜ | ⬜ | ⬜ | ⬜ |
 | S4 | ⬜ | ⬜ | ⬜ | ⬜ |
 

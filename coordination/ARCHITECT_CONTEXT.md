@@ -133,7 +133,8 @@ coordination/TESTER_GUIDE.md              when to test
 | P1 Docling | **DONE** (BUILD S1) |
 | S1.5 Section/title trap fix | **DONE** — 286 tests |
 | P2 Whoosh | **DONE** — Round 2 PASS |
-| P3 EntityRuler | **UNBLOCKED** — start S3 |
+| P3 EntityRuler | **DONE** (0f422a3) — debug trace only |
+| P4 Final gate | **IN PROGRESS** — Round 3 TEST + UI |
 | User Round 1 UI | **FAIL** (stale index) |
 | User Round 1b | **PASS** — 3/4 strong, 1 partial |
 
