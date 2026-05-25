@@ -118,13 +118,13 @@ assert not nlp.pipe_names  # or only entity_ruler after add
 
 ## P4 — Integration & preflight (45 min)
 
-- [ ] **T4.1** Ensure `scripts/preflight_tester.py` runs (architect added; extend if needed)
+- [x] **T4.1** Ensure `scripts/preflight_tester.py` runs (architect added; extend if needed)
 
   - Report `extractor_version`, section titles, gate status
 
-- [ ] **T4.2** Document flags in `coordination/TESTER_GUIDE.md` (architect owns; coder add env examples if new flags)
+- [x] **T4.2** Document flags in `coordination/TESTER_GUIDE.md` (architect owns; coder add env examples if new flags)
 
-- [ ] **T4.3** Run full gate:
+- [x] **T4.3** Run full gate:
 
 ```powershell
 $env:TRACEDOC_EXTRACTOR="v2"
@@ -135,7 +135,7 @@ python eval/run_eval.py
 python scripts/preflight_tester.py samples/your_test.pdf
 ```
 
-- [ ] **T4.4** Commit coder changes with message: `feat(v2): docling + whoosh + entity ruler behind env flags`
+- [x] **T4.4** Commit coder changes with message: `feat(v2): docling + whoosh + entity ruler behind env flags`
 
 ---
 
@@ -156,7 +156,7 @@ python scripts/preflight_tester.py samples/your_test.pdf
 | P1 | done | Docling extractor + TRACEDOC_EXTRACTOR=v2 dispatch + tests |
 | P2 | done | Whoosh index + whoosh/hybrid retrieval with SQLite fallback |
 | P3 | done | Blank English EntityRuler behind TRACEDOC_EXTRACTION |
-| P4 | | |
+| P4 | done | README + TESTER_GUIDE production env; pytest + eval gate PASS |
 
 ---
 

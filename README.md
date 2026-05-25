@@ -160,10 +160,48 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
+### v2 deterministic stack (Docling + Whoosh + EntityRuler)
+
+Install the optional v2 dependencies (Docling PDF extraction, Whoosh BM25 index, spaCy blank `entity_ruler`):
+
+```bash
+pip install -r requirements.txt -r requirements-v2.txt
+```
+
+| Variable | Values | Default | Purpose |
+|----------|--------|---------|---------|
+| `TRACEDOC_EXTRACTOR` | `v1`, `v2` | `v1` | `v2` uses Docling for PDFs; `v1` keeps pypdf + layout reconstruction |
+| `TRACEDOC_RETRIEVAL` | `sqlite`, `whoosh`, `hybrid` | `sqlite` | `hybrid` merges SQLite BM25 + Whoosh (deterministic tie-break) |
+| `TRACEDOC_EXTRACTION` | `grammar`, `ruler`, `both` | `grammar` | `both` adds spaCy EntityRuler spans to debug trace (no model download) |
+
+**PowerShell — production env for UI, tests, and eval:**
+
+```powershell
+$env:TRACEDOC_EXTRACTOR="v2"
+$env:TRACEDOC_RETRIEVAL="hybrid"
+$env:TRACEDOC_EXTRACTION="both"
+```
+
+Preflight before Streamlit (replace path with your PDF or TXT):
+
+```powershell
+python scripts/preflight_tester.py eval/benchmark_docs/symbolic_architecture_doc.txt
+```
+
 ## Run tests
 
 ```bash
 python -m pytest
+```
+
+With the v2 stack (same flags as production):
+
+```powershell
+$env:TRACEDOC_EXTRACTOR="v2"
+$env:TRACEDOC_RETRIEVAL="hybrid"
+$env:TRACEDOC_EXTRACTION="both"
+python -m pytest -q
+python eval/run_eval.py
 ```
 
 ## Continuous integration
@@ -187,6 +225,15 @@ Uses `data/demo_tracedoc.db` and sample files under `samples/`.
 ## Run Streamlit app
 
 ```bash
+streamlit run app/main.py
+```
+
+For the v2 stack, set env flags first (see table above), then:
+
+```powershell
+$env:TRACEDOC_EXTRACTOR="v2"
+$env:TRACEDOC_RETRIEVAL="hybrid"
+$env:TRACEDOC_EXTRACTION="both"
 streamlit run app/main.py
 ```
 

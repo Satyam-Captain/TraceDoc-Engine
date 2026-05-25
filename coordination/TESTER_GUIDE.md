@@ -4,15 +4,47 @@
 
 ---
 
-## Testing gates (read preflight first)
+## Production environment (v2 stack)
 
-Run preflight **before** opening Streamlit:
+Use this block for **preflight**, **pytest**, **eval**, and **Streamlit** on branch `feat/deterministic-stack-v2`:
 
 ```powershell
 cd c:\Users\satti\Desktop\tracedoc-engine
-$env:TRACEDOC_EXTRACTOR="v2"
-$env:TRACEDOC_RETRIEVAL="hybrid"
-$env:TRACEDOC_EXTRACTION="both"
+.\.venv\Scripts\Activate.ps1
+
+# One-time (if not done)
+pip install -r requirements.txt -r requirements-v2.txt
+
+# Production flags — set in every test session
+$env:TRACEDOC_EXTRACTOR="v2"      # Docling PDF extraction
+$env:TRACEDOC_RETRIEVAL="hybrid"  # SQLite BM25 + Whoosh, merged scores
+$env:TRACEDOC_EXTRACTION="both"    # Grammar + spaCy EntityRuler (blank en, no download)
+```
+
+| Flag | Values | Default | When to change |
+|------|--------|---------|----------------|
+| `TRACEDOC_EXTRACTOR` | `v1`, `v2` | `v1` | Baseline/regression on old PDF path: use `v1` |
+| `TRACEDOC_RETRIEVAL` | `sqlite`, `whoosh`, `hybrid` | `sqlite` | P2 slice check: `whoosh` only; production: `hybrid` |
+| `TRACEDOC_EXTRACTION` | `grammar`, `ruler`, `both` | `grammar` | P3 slice: `ruler` or `both` |
+
+**Full regression gate (run before UI or architect review):**
+
+```powershell
+python -m pytest -q
+python eval/run_eval.py
+python scripts/preflight_tester.py eval/benchmark_docs/symbolic_architecture_doc.txt
+python scripts/preflight_tester.py "C:\path\to\your\document.pdf"
+```
+
+Restart Streamlit after changing env vars or installing `requirements-v2.txt`.
+
+---
+
+## Testing gates (read preflight first)
+
+Run preflight **before** opening Streamlit (with production env block above):
+
+```powershell
 python scripts/preflight_tester.py "C:\path\to\your\document.pdf"
 ```
 
@@ -39,28 +71,15 @@ python scripts/preflight_tester.py "C:\path\to\your\document.pdf"
 
 ---
 
-## One-time install (required before v2 UI)
+## Streamlit UI
 
-Streamlit uses your project `.venv`. Docling is **not** in `requirements.txt` only — install v2 stack once:
-
-```powershell
-cd c:\Users\satti\Desktop\tracedoc-engine
-.\.venv\Scripts\pip install -r requirements.txt -r requirements-v2.txt
-.\.venv\Scripts\python -c "import docling; print('docling OK')"
-```
-
-If you see `No module named 'docling'`, you skipped this step or Streamlit is not using `.venv`.
-
-**Restart Streamlit** after install (stop terminal Ctrl+C, start again).
-
-## Environment for UI test (PowerShell)
+With production env set:
 
 ```powershell
-$env:TRACEDOC_EXTRACTOR="v2"
-$env:TRACEDOC_RETRIEVAL="hybrid"
-$env:TRACEDOC_EXTRACTION="both"
 .\.venv\Scripts\streamlit run app/main.py
 ```
+
+If you see `No module named 'docling'`, run the install step in **Production environment** and restart Streamlit.
 
 Clear old DB if you need a clean run (UI or delete `data/tracedoc.db`).
 
@@ -110,10 +129,4 @@ For each test round:
 
 ## Quick eval (regression)
 
-```powershell
-$env:TRACEDOC_EXTRACTOR="v2"
-$env:TRACEDOC_RETRIEVAL="hybrid"
-python eval/run_eval.py
-```
-
-All PASS → safe for architect review.
+Uses the same three env vars as **Production environment**. All PASS → safe for architect review.
